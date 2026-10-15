@@ -1,0 +1,2576 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>병목은 이익을 가져가는가</title>
+
+    <!-- 서체: 다크 키노트 시안. Pretendard Variable 하나로 제목(200~300)과 강조(500~600)의 굵기 대비를 만든다 -->
+    <!-- Pretendard Variable v1.3.9 (SIL OFL 1.1, fonts/OFL.txt). 오프라인에서도 같은 글꼴로 그리도록 덱 폴더에 둔다 -->
+    <style id="font-local">
+        /* 고정 굵기 TrueType(woff2). 가변·CFF 글꼴은 Chromium PDF에서 Type 3으로 들어가 Acrobat에서 글자가 블록으로 보인다(2026-10-15) */
+        @font-face { font-family: "Pretendard Variable"; font-weight: 200; font-style: normal; font-display: block; src: url("fonts/Pretendard-ExtraLight.woff2") format("woff2"); }
+        @font-face { font-family: "Pretendard Variable"; font-weight: 300; font-style: normal; font-display: block; src: url("fonts/Pretendard-Light.woff2") format("woff2"); }
+        @font-face { font-family: "Pretendard Variable"; font-weight: 400; font-style: normal; font-display: block; src: url("fonts/Pretendard-Regular.woff2") format("woff2"); }
+        @font-face { font-family: "Pretendard Variable"; font-weight: 500; font-style: normal; font-display: block; src: url("fonts/Pretendard-Medium.woff2") format("woff2"); }
+        @font-face { font-family: "Pretendard Variable"; font-weight: 600; font-style: normal; font-display: block; src: url("fonts/Pretendard-SemiBold.woff2") format("woff2"); }
+        @font-face { font-family: "Pretendard Variable"; font-weight: 700; font-style: normal; font-display: block; src: url("fonts/Pretendard-Bold.woff2") format("woff2"); }
+        @font-face { font-family: "Pretendard Variable"; font-weight: 300; font-style: normal; font-display: block; src: url("fonts/PretendardJP-Light-hanja.woff2") format("woff2"); unicode-range: U+534A; } /* 15장 半: Pretendard에 한자가 없어 Pretendard JP에서 이 글자만 잘라 넣음 */
+    </style>
+
+    <!-- 색·간격·모서리 토큰: 덱 폴더의 DESIGN.md에서 내보낸 값이다. new_deck.py가 채우고, 손으로 고치지 않는다. -->
+    <style id="deck-tokens">
+:root {
+  --color-primary: #16181b;
+  --color-secondary: #474d55;
+  --color-muted: #626871;
+  --color-neutral: #f2f3f0;
+  --color-surface: #e6e8e4;
+  --color-rule: #cbd0ca;
+  --color-bar: #7a808a;
+  --color-accent: #2448b8;
+  --color-accent-soft: #dde4f6;
+  --color-accent-ink: #1b378f;
+  --color-on-accent: #f2f3f0;
+  --color-stage: #1e2124;
+  --spacing-canvas-width: 1920px;
+  --spacing-canvas-height: 1080px;
+  --spacing-xs: 8px;
+  --spacing-sm: 16px;
+  --spacing-md: 24px;
+  --spacing-lg: 40px;
+  --spacing-xl: 64px;
+  --spacing-xxl: 96px;
+  --spacing-margin-x: 112px;
+  --spacing-margin-x-wide: 128px;
+  --spacing-margin-top: 96px;
+  --spacing-margin-bottom: 64px;
+  --spacing-title-gap: 56px;
+  --spacing-hairline: 1px;
+  --spacing-rule-strong: 2px;
+  --rounded-none: 0px;
+}
+    </style>
+
+    <style>
+        /* ===========================================
+           규칙 (DESIGN.md 요약)
+           - 색은 var(--color-*)만 쓴다. 색 값을 새로 쓰지 않는다.
+           - 글자 크기는 12단계만 쓴다:
+             168 120 88 64 44 38 30 26 24 22 (슬라이드 안), 16 (슬라이드 밖 UI)
+           - 모서리 0, 그림자·그라데이션 없음, 선은 1px rule 또는 2px primary
+           - 움직임은 transform/opacity, 이징 하나, 0.6s
+           =========================================== */
+        :root {
+            --font-sans: "IBM Plex Sans KR", sans-serif;
+            --font-mono: "IBM Plex Mono", "IBM Plex Sans KR", monospace;
+            --ease: cubic-bezier(0.16, 1, 0.3, 1);
+            --dur: 0.6s;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        ul, ol { list-style: none; }
+
+        /* ===========================================
+           고정 16:9 스테이지 (frontend-slides viewport-base.css, 색만 토큰으로)
+           =========================================== */
+        html,
+        body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: var(--color-stage);
+            color: var(--color-primary);
+        }
+
+        .deck-viewport {
+            position: fixed;
+            inset: 0;
+            overflow: hidden;
+            background: var(--color-stage);
+        }
+
+        .deck-stage {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 1920px;
+            height: 1080px;
+            overflow: hidden;
+            transform-origin: 0 0;
+            background: var(--color-neutral);
+            color: var(--color-primary);
+            font-family: var(--font-sans);
+            word-break: keep-all;
+            overflow-wrap: break-word;
+            line-break: strict;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        .slide {
+            position: absolute;
+            inset: 0;
+            width: 1920px;
+            height: 1080px;
+            overflow: hidden;
+            visibility: hidden;
+            opacity: 0;
+            pointer-events: none;
+            background: var(--color-neutral);
+        }
+
+        .slide.active,
+        .slide.visible {
+            visibility: visible;
+            opacity: 1;
+            pointer-events: auto;
+            z-index: 1;
+        }
+
+        img,
+        video,
+        canvas,
+        svg {
+            max-width: 100%;
+            max-height: 100%;
+        }
+
+        @media print {
+            html,
+            body {
+                width: 1920px;
+                height: auto;
+                overflow: visible;
+                background: var(--color-neutral);
+            }
+
+            .deck-viewport { position: static; overflow: visible; }
+
+            .deck-stage {
+                position: static;
+                width: auto;
+                height: auto;
+                transform: none !important;
+            }
+
+            .slide {
+                position: relative;
+                visibility: visible !important;
+                opacity: 1 !important;
+                width: 1920px;
+                height: 1080px;
+                break-after: page;
+            }
+
+            .slide:last-child { break-after: auto; }
+            .notes-panel, .edit-toggle, .edit-hotzone { display: none !important; }
+
+            /* 인쇄에서는 활성 장이 따로 없으므로 등장 효과를 모두 끝난 상태로 고정한다 */
+            .reveal { opacity: 1 !important; transform: none !important; }
+            .grow { transform: none !important; }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            *,
+            *::before,
+            *::after {
+                animation-duration: 0.01ms !important;
+                transition-duration: 0.2s !important;
+            }
+        }
+
+        /* ===========================================
+           공통 프레임: 제목 → 근거 범위 → 본문 → 바닥줄
+           =========================================== */
+        .frame {
+            position: absolute;
+            inset: 96px 112px 64px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .slide[data-mode="concept"] .frame { left: 128px; right: 128px; }
+
+        .title {
+            max-width: 1600px;
+            font-size: 64px;
+            line-height: 1.2;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            text-wrap: balance;
+        }
+
+        .scope {
+            margin-top: 16px;
+            font-size: 22px;
+            line-height: 1.4;
+            color: var(--color-muted);
+        }
+
+        .body {
+            position: relative;
+            flex: 1;
+            min-height: 0;
+            margin-top: 56px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .body.center { justify-content: center; padding-bottom: 40px; }
+
+        .foot {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            gap: 48px;
+            font-size: 22px;
+            line-height: 1.4;
+            color: var(--color-muted);
+        }
+
+        .foot .page {
+            font-family: var(--font-mono);
+            font-weight: 500;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .notes { display: none; }
+        .num { font-variant-numeric: tabular-nums; }
+        .hl { color: var(--color-accent); }
+
+        .legend {
+            display: flex;
+            align-items: center;
+            gap: 40px;
+            font-size: 22px;
+            color: var(--color-secondary);
+        }
+
+        .legend .key { display: inline-flex; align-items: center; gap: 12px; }
+        .legend .sw { width: 22px; height: 22px; display: inline-block; }
+        .sw.accent { background: var(--color-accent); }
+        .sw.bar { background: var(--color-bar); }
+        .sw.chip { background: var(--color-accent-soft); }
+
+        /* ===========================================
+           움직임: 주장 → 근거 순서. 막대는 기준선에서 자란다.
+           ?still 이면 모든 전환을 끈다(검사·PDF용).
+           =========================================== */
+        .reveal {
+            opacity: 0;
+            transform: translateY(16px);
+            transition: opacity var(--dur) var(--ease), transform var(--dur) var(--ease);
+            transition-delay: var(--d, 0s);
+        }
+
+        .slide.visible .reveal { opacity: 1; transform: none; }
+
+        .grow {
+            transform: scaleX(0);
+            transform-origin: left center;
+            transition: transform 0.8s var(--ease);
+            transition-delay: var(--d, 0.3s);
+        }
+
+        .grow.from-right { transform-origin: right center; }
+        .slide.visible .grow { transform: scaleX(1); }
+
+        html.still .reveal,
+        html.still .grow { transition: none !important; }
+
+        /* ===========================================
+           L-cover · 표지: 왼쪽 아래에 마크 → 제목 → 부제 → 날짜
+           =========================================== */
+        .cover {
+            position: absolute;
+            left: 112px;
+            right: 112px;
+            bottom: 128px;
+        }
+
+        .cover-mark {
+            width: 64px;
+            height: 4px;
+            margin-bottom: 56px;
+            background: var(--color-accent);
+        }
+
+        .cover-title {
+            font-size: 168px;
+            line-height: 1.05;
+            font-weight: 700;
+            letter-spacing: -0.035em;
+        }
+
+        .cover-title em { font-style: normal; color: var(--color-accent); }
+
+        .cover-sub {
+            margin-top: 48px;
+            max-width: 1300px;
+            font-size: 38px;
+            line-height: 1.45;
+            color: var(--color-secondary);
+        }
+
+        .cover-date {
+            margin-top: 64px;
+            font-family: var(--font-mono);
+            font-size: 22px;
+            font-weight: 500;
+            color: var(--color-muted);
+        }
+
+        /* ===========================================
+           L-chain · 흐름(밸류체인): 단계를 2px 선과 꺾쇠로 잇는다
+           =========================================== */
+        .chain {
+            display: grid;
+            grid-template-columns: repeat(var(--n, 6), 1fr);
+            column-gap: 40px;
+        }
+
+        .chain .stage {
+            position: relative;
+            padding-top: 32px;
+            border-top: 2px solid var(--color-primary);
+        }
+
+        .chain .hop {
+            position: absolute;
+            top: -24px;
+            right: -32px;
+            padding: 0 6px;
+            font-size: 38px;
+            line-height: 44px;
+            color: var(--color-muted);
+            background: var(--color-neutral);
+        }
+
+        .chain .name { font-size: 38px; line-height: 1.2; font-weight: 700; letter-spacing: -0.02em; }
+        .chain .sub { min-height: 31px; margin-top: 8px; font-size: 22px; line-height: 1.4; color: var(--color-muted); }
+
+        .chain .who {
+            margin-top: 32px;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 16px;
+        }
+
+        .chain .who li { font-size: 26px; line-height: 1.35; font-weight: 500; color: var(--color-secondary); }
+
+        .chip {
+            margin-left: -8px;
+            padding: 4px 8px;
+            background: var(--color-accent-soft);
+            color: var(--color-accent-ink) !important;
+            font-weight: 600 !important;
+        }
+
+        .chain-legend { margin-top: 64px; }
+
+        /* ===========================================
+           L-dual · 쌍막대: 두 지표를 같은 척도(--max)로 나란히
+           =========================================== */
+        .dual {
+            display: grid;
+            grid-template-columns: 220px 1fr 1fr;
+            column-gap: 72px;
+            align-items: center;
+        }
+
+        .dual .colhead {
+            margin-bottom: 16px;
+            padding-bottom: 24px;
+            border-bottom: 2px solid var(--color-primary);
+            font-size: 26px;
+            font-weight: 700;
+        }
+
+        .dual .colhead small { margin-left: 8px; font-size: 22px; font-weight: 500; color: var(--color-muted); }
+
+        .dual .rowlabel {
+            height: 72px;
+            display: flex;
+            align-items: center;
+            font-size: 26px;
+            font-weight: 600;
+        }
+
+        .track { height: 72px; display: flex; align-items: center; }
+
+        .track .bar {
+            height: 24px;
+            width: calc(var(--v) / var(--max, 60) * (100% - 96px));
+            background: var(--color-bar);
+        }
+
+        .track .bar.hl { background: var(--color-accent); }
+
+        .track .val {
+            margin-left: 16px;
+            font-size: 26px;
+            font-weight: 600;
+            color: var(--color-secondary);
+        }
+
+        .track .val.hl { color: var(--color-accent); }
+
+        /* ===========================================
+           L-range · 범위막대: 최저–최고, 0선 필수
+           --min, --span 으로 축을 정한다 (예: -50 ~ +60 → --min:-50, --span:110)
+           =========================================== */
+        .range-wrap { position: relative; padding-bottom: 48px; --min: -50; --span: 110; }
+
+        .range {
+            display: grid;
+            grid-template-columns: 290px 1fr;
+            column-gap: 40px;
+        }
+
+        .range .who {
+            height: 96px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        .range .who b { font-size: 30px; line-height: 1.2; font-weight: 700; }
+        .range .who span { margin-top: 8px; font-family: var(--font-mono); font-size: 22px; color: var(--color-muted); }
+
+        .rtrack { position: relative; height: 96px; }
+
+        .rtrack .span {
+            position: absolute;
+            top: 36px;
+            height: 24px;
+            left: calc((var(--lo) - var(--min)) / var(--span) * 100%);
+            width: calc((var(--hi) - var(--lo)) / var(--span) * 100%);
+            background: var(--color-bar);
+        }
+
+        .rtrack .span.hl { background: var(--color-accent); }
+
+        .rtrack .lo,
+        .rtrack .hi {
+            position: absolute;
+            top: 30px;
+            z-index: 1;
+            padding: 0 4px;
+            font-size: 24px;
+            line-height: 36px;
+            font-weight: 600;
+            color: var(--color-secondary);
+            background: var(--color-neutral);
+        }
+
+        .rtrack .lo { right: calc(100% - (var(--lo) - var(--min)) / var(--span) * 100% + 12px); }
+        .rtrack .hi { left: calc((var(--hi) - var(--min)) / var(--span) * 100% + 12px); }
+
+        .axis-layer {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            left: 330px;
+            right: 0;
+            pointer-events: none;
+        }
+
+        .axis-layer .zero {
+            position: absolute;
+            top: 0;
+            bottom: 48px;
+            left: calc((0 - var(--min)) / var(--span) * 100%);
+            width: 2px;
+            background: var(--color-primary);
+        }
+
+        .axis-layer .tick {
+            position: absolute;
+            bottom: 0;
+            transform: translateX(-50%);
+            left: calc((var(--t) - var(--min)) / var(--span) * 100%);
+            font-family: var(--font-mono);
+            font-size: 22px;
+            color: var(--color-muted);
+        }
+
+        .caveat { margin-top: 24px; font-size: 24px; color: var(--color-secondary); }
+
+        /* ===========================================
+           L-h2h · 맞대결: 두 대상 × 지표, 큰 숫자 + 얇은 발산 막대
+           =========================================== */
+        .h2h {
+            display: grid;
+            grid-template-columns: 300px 1fr 1fr;
+            column-gap: 80px;
+            --min: -10;
+            --span: 65;
+        }
+
+        .h2h .head {
+            padding-bottom: 24px;
+            border-bottom: 2px solid var(--color-primary);
+            font-size: 44px;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+        }
+
+                .h2h .metric { padding-top: 48px; font-size: 30px; font-weight: 600; }
+        .h2h .cell { padding-top: 32px; }
+        .h2h .gap { margin-top: 32px; border-top: 1px solid var(--color-rule); }
+
+        .h2h .big {
+            font-size: 88px;
+            line-height: 1;
+            font-weight: 600;
+            letter-spacing: -0.025em;
+        }
+
+        .dtrack { position: relative; height: 16px; margin-top: 24px; }
+
+        .dtrack::before {
+            content: "";
+            position: absolute;
+            left: calc((0 - var(--min)) / var(--span) * 100%);
+            top: -8px;
+            bottom: -8px;
+            width: 2px;
+            background: var(--color-primary);
+        }
+
+        .dtrack .pos,
+        .dtrack .neg { position: absolute; top: 0; height: 16px; background: var(--color-bar); }
+        .dtrack .pos { left: calc((0 - var(--min)) / var(--span) * 100%); width: calc(var(--v) / var(--span) * 100%); }
+        .dtrack .neg { right: calc(100% - (0 - var(--min)) / var(--span) * 100%); width: calc(var(--v) / var(--span) * 100%); }
+        .dtrack .hl { background: var(--color-accent); }
+
+        /* ===========================================
+           L-bignum · 핵심 숫자: 왼쪽에 숫자 하나, 오른쪽에 읽는 법
+           =========================================== */
+        .bignum {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            column-gap: 96px;
+            align-items: end;
+        }
+
+        .bignum .n {
+            font-size: 120px;
+            line-height: 1;
+            font-weight: 600;
+            letter-spacing: -0.03em;
+            color: var(--color-accent);
+        }
+
+        .bignum .n small { margin-left: 8px; font-size: 44px; font-weight: 600; letter-spacing: 0; }
+        .bignum .cap { margin-top: 24px; font-size: 22px; line-height: 1.4; color: var(--color-muted); }
+        .bignum .read li { padding: 24px 0; font-size: 30px; line-height: 1.45; color: var(--color-secondary); }
+        .bignum .read li + li { border-top: 1px solid var(--color-rule); }
+        .bignum .read b { color: var(--color-primary); font-weight: 600; }
+
+        /* ===========================================
+           L-steps · 단계: 먼저 → 다음 → 마지막, 첫 단계만 넓게
+           =========================================== */
+        .steps {
+            display: grid;
+            grid-template-columns: 1.3fr 64px 1fr 64px 1fr;
+            align-items: start;
+        }
+
+        .steps .step { padding-top: 36px; border-top: 2px solid var(--color-primary); }
+        .steps .when { font-size: 22px; font-weight: 600; color: var(--color-accent); }
+        .steps .what { margin-top: 16px; font-size: 44px; line-height: 1.3; font-weight: 700; letter-spacing: -0.015em; }
+        .steps .why { margin-top: 24px; font-size: 30px; line-height: 1.45; color: var(--color-secondary); text-wrap: balance; }
+        .steps .stat { margin-top: 48px; }
+        .steps .stat .n { font-size: 88px; line-height: 1; font-weight: 600; letter-spacing: -0.025em; color: var(--color-accent); }
+        .steps .stat .n small { margin-left: 4px; font-size: 44px; letter-spacing: 0; }
+        .steps .stat .cap { margin-top: 16px; font-size: 22px; line-height: 1.4; color: var(--color-muted); }
+
+        .steps .arrow {
+            margin-top: -26px;
+            text-align: center;
+            font-size: 38px;
+            line-height: 1.3;
+            color: var(--color-muted);
+        }
+
+        /* ===========================================
+           L-close · 요약 + 토론 질문
+           =========================================== */
+        .close {
+            display: grid;
+            grid-template-columns: 1.3fr 1fr;
+            column-gap: 96px;
+            align-items: start;
+        }
+
+        .claims li { display: grid; grid-template-columns: 56px 1fr; padding: 32px 0; }
+        .claims li + li { border-top: 1px solid var(--color-rule); }
+        .claims .k { font-size: 38px; line-height: 1.45; font-weight: 700; color: var(--color-accent); }
+        .claims p { font-size: 38px; line-height: 1.45; font-weight: 500; text-wrap: balance; }
+
+        .panel { padding: 56px; background: var(--color-surface); }
+        .panel .label { font-size: 22px; font-weight: 600; color: var(--color-accent-ink); }
+        .panel p { margin-top: 24px; font-size: 44px; line-height: 1.38; font-weight: 700; letter-spacing: -0.015em; }
+
+        /* ===========================================
+           L-quotes · 큰 인용 목록: 흔한 표현을 회색으로 크게, 판정 한 문장
+           =========================================== */
+        .quotes {
+            display: grid;
+            grid-template-columns: 1.1fr 1fr;
+            column-gap: 96px;
+            align-items: center;
+        }
+
+        .quotes ul { display: grid; gap: 24px; }
+        .quotes li { font-size: 88px; line-height: 1.15; font-weight: 500; letter-spacing: -0.03em; color: var(--color-muted); }
+        .quotes .verdict { font-size: 44px; line-height: 1.38; font-weight: 700; color: var(--color-accent); text-wrap: balance; }
+
+        /* ===========================================
+           L-compare · Before/After 표
+           =========================================== */
+        .compare {
+            display: grid;
+            grid-template-columns: 400px 72px 1fr;
+            column-gap: 24px;
+        }
+
+        .compare .head { padding-bottom: 24px; font-family: var(--font-mono); font-size: 22px; font-weight: 500; color: var(--color-secondary); }
+        .compare .head.after { color: var(--color-accent); }
+        .compare .cell { padding: 40px 0; border-top: 1px solid var(--color-rule); font-size: 38px; line-height: 1.42; }
+        .compare .before { font-weight: 500; color: var(--color-muted); }
+        .compare .to { text-align: center; font-family: var(--font-mono); color: var(--color-muted); }
+        .compare .after { font-weight: 700; }
+
+        /* ===========================================
+           L-panels · 근거와 한계 두 패널 (한 장에 패널 최대 2개)
+           =========================================== */
+        .panels {
+            display: grid;
+            grid-template-columns: 1.35fr 1fr;
+            gap: 56px;
+            min-height: 520px;
+        }
+
+        .panels .pane { padding: 56px; display: flex; flex-direction: column; gap: 24px; }
+        .panels .pane.support { background: var(--color-accent-soft); }
+        .panels .pane.limit { background: var(--color-surface); }
+        .panels h3 { font-size: 26px; font-weight: 700; }
+        .panels .support h3 { color: var(--color-accent-ink); }
+        .panels .limit h3 { color: var(--color-accent-ink); }
+        .panels p { font-size: 38px; line-height: 1.45; text-wrap: pretty; }
+        .panels .src { margin-top: auto; font-family: var(--font-mono); font-size: 22px; color: var(--color-secondary); }
+
+        /* ===========================================
+           L-flowbar · 단계 흐름 + 비교 막대
+           =========================================== */
+        .flow {
+            display: grid;
+            grid-template-columns: 1fr 56px 1fr 56px 1fr 56px 1fr;
+            align-items: start;
+        }
+
+        .flow .step { padding-top: 24px; border-top: 1px solid var(--color-rule); font-size: 38px; line-height: 1.3; font-weight: 700; color: var(--color-secondary); }
+        .flow .step.hl { color: var(--color-primary); border-top: 2px solid var(--color-primary); }
+        .flow .step small { display: block; margin-top: 8px; font-size: 22px; font-weight: 400; color: var(--color-muted); }
+        .flow .to { padding-top: 24px; text-align: center; font-family: var(--font-mono); font-size: 30px; color: var(--color-muted); }
+
+        .evidence {
+            margin-top: 120px;
+            display: grid;
+            grid-template-columns: 860px 1fr;
+            column-gap: 88px;
+            align-items: center;
+        }
+
+        .evidence .rows { display: grid; gap: 24px; }
+        .evidence .row { display: grid; grid-template-columns: 240px 1fr; align-items: center; gap: 24px; font-size: 26px; color: var(--color-secondary); }
+        .evidence .row .track { height: 48px; }
+        .evidence .val { font-family: var(--font-mono); }
+        .evidence p { font-size: 30px; line-height: 1.45; color: var(--color-secondary); }
+        .evidence p strong { color: var(--color-primary); font-weight: 700; }
+        .evidence .src { margin-top: 16px; font-family: var(--font-mono); font-size: 22px; color: var(--color-muted); }
+
+        /* ===========================================
+           L-checklist · 번호 체크리스트 (번호는 항목과 같은 크기, Mono)
+           =========================================== */
+        .checks { display: grid; gap: 40px; }
+        .checks li { display: grid; grid-template-columns: 96px 1fr; align-items: baseline; }
+        .checks .n { font-family: var(--font-mono); font-size: 44px; font-weight: 500; color: var(--color-accent); }
+        .checks .q { font-size: 44px; line-height: 1.35; font-weight: 500; }
+        .checks .cite { margin-left: 16px; font-family: var(--font-mono); font-size: 22px; font-weight: 400; color: var(--color-muted); }
+
+        /* ===========================================
+           L-closing · 마무리 문장 + 콜아웃 (덱에서 제목보다 큰 문장은 표지와 이 장뿐)
+           =========================================== */
+        .closing { margin-block: auto; display: flex; flex-direction: column; }
+        .closing .claim { max-width: 1500px; font-size: 88px; line-height: 1.25; font-weight: 700; letter-spacing: -0.025em; text-wrap: balance; }
+
+        .callout {
+            align-self: flex-start;
+            margin-top: 72px;
+            padding: 24px 40px;
+            background: var(--color-accent);
+            color: var(--color-on-accent);
+            font-size: 44px;
+            line-height: 1.3;
+            font-weight: 600;
+        }
+
+        .refs { display: flex; gap: 56px; padding-top: 24px; border-top: 1px solid var(--color-rule); }
+
+        /* ===========================================
+           발표 도구 (스테이지 밖): 노트(N), 편집(E 또는 왼쪽 위)
+           =========================================== */
+        .notes-panel {
+            position: fixed;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 1100;
+            display: none;
+            max-height: 32vh;
+            overflow: auto;
+            padding: 16px 24px;
+            background: var(--color-stage);
+            color: var(--color-neutral);
+            font-family: var(--font-sans);
+            font-size: 16px;
+            line-height: 1.6;
+        }
+
+        .notes-panel.show { display: block; }
+
+        .edit-hotzone {
+            position: fixed;
+            top: 0;
+            left: 0;
+            z-index: 10000;
+            width: 80px;
+            height: 80px;
+            cursor: pointer;
+        }
+
+        .edit-toggle {
+            position: fixed;
+            top: 16px;
+            left: 16px;
+            z-index: 10001;
+            padding: 8px 16px;
+            border: 1px solid var(--color-rule);
+            background: var(--color-neutral);
+            color: var(--color-primary);
+            font-family: var(--font-sans);
+            font-size: 16px;
+            font-weight: 500;
+            cursor: pointer;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s var(--ease);
+        }
+
+        .edit-toggle.show,
+        .edit-toggle.active { opacity: 1; pointer-events: auto; }
+        .edit-toggle.active { background: var(--color-accent); color: var(--color-on-accent); border-color: var(--color-accent); }
+        [contenteditable="true"] { outline: 2px dashed var(--color-accent); outline-offset: 4px; }
+    </style>
+    <style>
+        /* ===========================================
+           이 덱에서 더한 변형 (계열 이름 접두어)
+           =========================================== */
+
+        /* L-chain · 두 줄 밸류체인과 아래 설명 */
+        .chain-rows { display: flex; flex-direction: column; gap: 56px; }
+        .chain-flowline { margin-top: 48px; display: flex; gap: 64px; font-size: 26px; line-height: 1.35; font-weight: 500; color: var(--color-secondary); }
+        .chain-flowline b { color: var(--color-primary); font-weight: 700; }
+        .chain-note { margin-top: 40px; font-size: 30px; line-height: 1.45; color: var(--color-secondary); }
+        .chain-note b { color: var(--color-primary); font-weight: 600; }
+
+        /* L-dual · 두 묶음을 같은 척도로(dual-split), 세 열(dual-3) */
+        .dual-split { display: grid; grid-template-columns: 1fr 1fr; column-gap: 96px; align-items: start; }
+        .dual.dual-group { grid-template-columns: 200px 1fr; column-gap: 32px; }
+        .dual-group .colhead { grid-column: 1 / -1; }
+        .dual.dual-3 { grid-template-columns: 200px 1fr 1fr 1fr; column-gap: 48px; }
+        .dual-note { margin-top: 40px; font-size: 24px; line-height: 1.4; color: var(--color-secondary); }
+        /* Sankey(SVG): 띠는 bar 색 반투명, 주장 띠·마디만 accent */
+        .sankey { display: block; width: 100%; height: auto; overflow: visible; }
+        .sankey text { font-family: var(--font-sans); font-size: 26px; font-weight: 500; fill: var(--color-secondary); letter-spacing: -0.01em; }
+        .sankey .sk-v { fill: var(--color-primary); font-weight: 600; font-feature-settings: "tnum"; }
+        .sankey .sk-flow { font-size: 24px; fill: var(--color-primary); }
+        .sankey .sk-p { font-size: 22px; font-weight: 400; fill: var(--color-muted); }
+        .sankey .sk-sub { font-size: 22px; font-weight: 400; fill: var(--color-muted); }
+        .sankey .hl, .sankey .sk-v.hl { fill: var(--color-accent); }
+        .sankey-note { margin-top: 24px; font-size: 24px; line-height: 1.4; color: var(--color-secondary); }
+
+        /* L-h2h · 셀 안 보조 라벨, 아래 설명 */
+        .h2h .h2h-sub { margin-top: 16px; font-size: 26px; line-height: 1.35; font-weight: 500; color: var(--color-secondary); }
+        .h2h-note { margin-top: 64px; max-width: 1500px; font-size: 30px; line-height: 1.45; color: var(--color-secondary); }
+        .h2h-note b { color: var(--color-primary); font-weight: 600; }
+
+        /* L-range · 아래 사건 목록 */
+        .range-events { margin-top: 24px; display: grid; gap: 16px; }
+        .range-events li { display: grid; grid-template-columns: 200px 1fr; font-size: 26px; line-height: 1.35; color: var(--color-secondary); }
+        .range-events .d { font-family: var(--font-mono); font-size: 22px; font-weight: 500; line-height: 35px; color: var(--color-muted); }
+
+        /* L-steps · 네 단계, 세 번째(주장)만 넓게 */
+        .steps.steps-4 { grid-template-columns: 1fr 64px 1fr 64px 1.3fr 64px 1fr; }
+        .steps .when.mono { font-family: var(--font-mono); font-weight: 500; }
+
+        /* L-flowbar · 흐름 아래 설명 두 칸, 0선 막대 */
+        .flowbar-note { margin-top: 96px; display: grid; grid-template-columns: 1fr 1fr; column-gap: 96px; align-items: start; }
+        .flowbar-note p { font-size: 38px; line-height: 1.45; color: var(--color-secondary); }
+        .flowbar-note p strong { color: var(--color-primary); font-weight: 700; }
+        .flowbar-rows { display: grid; gap: 40px; --min: -30; --span: 50; }
+        .flowbar-row { display: grid; grid-template-columns: 240px 1fr 150px; align-items: center; column-gap: 24px; font-size: 26px; font-weight: 500; color: var(--color-secondary); }
+        .flowbar-row .dtrack { margin-top: 0; }
+        .flowbar-row .val { font-size: 26px; font-weight: 600; color: var(--color-secondary); }
+        .flowbar-row .val.hl { color: var(--color-accent); }
+        .flowbar-text p { font-size: 30px; line-height: 1.45; color: var(--color-secondary); }
+        .flowbar-text p strong { color: var(--color-primary); font-weight: 700; }
+
+        /* L-panels · 패널 안 목록 */
+        .panels.panels-even { grid-template-columns: 1fr 1fr; }
+        .panels-list li { padding: 16px 0; font-size: 30px; line-height: 1.45; color: var(--color-primary); }
+        .panels-list li + li { border-top: 1px solid var(--color-rule); }
+
+        /* L-checklist · 아래 한 줄 */
+        .checks-foot { margin-top: 56px; font-size: 30px; line-height: 1.45; color: var(--color-secondary); }
+        .checks-foot b { color: var(--color-primary); font-weight: 600; }
+
+        /* L-compare · 왼쪽 열을 넓게, 아래 한 줄 */
+        .compare.compare-wide { grid-template-columns: 560px 72px 1fr; }
+        .compare .cell small { display: block; margin-top: 8px; font-size: 26px; line-height: 1.35; font-weight: 500; color: var(--color-muted); }
+        .compare-note { margin-top: 32px; font-size: 26px; line-height: 1.35; color: var(--color-secondary); }
+
+        /* L-close · 토론 질문 목록 */
+        .close .panel { padding: 48px; }
+        .close-qs { margin-top: 24px; display: grid; gap: 16px; }
+        .close-qs li { display: grid; grid-template-columns: 48px 1fr; font-size: 30px; line-height: 1.35; font-weight: 500; color: var(--color-primary); }
+        .close-qs .ord { font-family: var(--font-mono); color: var(--color-muted); }
+        .close .claims p { font-size: 38px; }
+        .close .claims .k { font-size: 38px; font-family: var(--font-mono); }
+
+        /* ===========================================
+           비평 1라운드 반영
+           =========================================== */
+        /* 한글 라벨은 Sans, Mono는 숫자·날짜만 */
+        .checks .cite { font-family: var(--font-sans); font-size: 24px; font-weight: 500; }
+        .compare .head { font-family: var(--font-sans); font-size: 24px; font-weight: 500; }
+        .range .who span { font-family: var(--font-sans); }
+        .panels .src { font-family: var(--font-sans); }
+        /* 흐름 단계 선: chain·steps와 같은 2px primary */
+        .flow .step { border-top: 2px solid var(--color-primary); }
+        /* 패널 높이는 내용에 맞춘다(묶음은 .body.center로 세로 중앙) */
+        .panels { min-height: 0; }
+        /* L-chain · 제품 흐름(→)과 돈 흐름(←) */
+        .chain-dir { margin-bottom: 24px; font-size: 24px; font-weight: 500; color: var(--color-muted); }
+        .chain-input { margin-top: 40px; display: flex; align-items: center; gap: 16px; font-size: 26px; font-weight: 500; color: var(--color-secondary); }
+        .chain-input .lbl { font-size: 24px; color: var(--color-muted); }
+        .chain-money { margin-top: 40px; padding-top: 24px; border-top: 1px solid var(--color-rule); display: flex; align-items: baseline; gap: 24px; font-size: 30px; font-weight: 600; color: var(--color-primary); }
+        .chain-money .lbl { font-size: 24px; font-weight: 500; color: var(--color-muted); }
+        .chain-money .to { color: var(--color-muted); font-weight: 400; }
+        /* L-h2h · 회사 네 열 */
+        .h2h.h2h-4 { grid-template-columns: 200px repeat(4, 1fr); column-gap: 48px; }
+        .h2h-4 .head { font-size: 38px; }
+        .h2h .none { font-size: 26px; line-height: 88px; font-weight: 500; color: var(--color-muted); }
+        /* L-flowbar · 변화율과 수준을 나눈 두 묶음 */
+        .flowbar-pair { margin-top: 96px; display: grid; grid-template-columns: 1fr 1fr; column-gap: 96px; align-items: start; }
+        .flowbar-pair h3 { margin-bottom: 24px; padding-bottom: 16px; border-bottom: 2px solid var(--color-primary); font-size: 26px; font-weight: 700; }
+        .flowbar-pair h3 small { margin-left: 8px; font-size: 22px; font-weight: 500; color: var(--color-muted); }
+        .flowbar-aux { margin-top: 64px; font-size: 30px; line-height: 1.45; color: var(--color-secondary); }
+        /* L-quotes · 판정 문단은 잉크, 주장 어절만 강조 */
+        .quotes .verdict.ink { color: var(--color-primary); }
+        .quotes .verdict-sub { margin-top: 24px; font-size: 26px; line-height: 1.35; color: var(--color-muted); }
+
+        /* ===========================================
+           비평 2라운드 반영
+           =========================================== */
+        /* 패널은 각자 내용 높이, 위쪽 맞춤 */
+        .panels { align-items: start; }
+        /* 칩 바탕은 열 기준선에서 시작하고 여백은 글자 쪽으로 */
+        .chip { margin-left: 0; }
+        /* L-h2h · 회사 네 열은 64px 숫자 */
+        .h2h-4 .big { font-size: 64px; line-height: 1.2; letter-spacing: -0.02em; }
+        .h2h-4 .metric { padding-top: 32px; }
+        .h2h-4 .cell { padding-top: 24px; }
+        .h2h-4 .gap { margin-top: 24px; }
+        .h2h-4 .none { line-height: 77px; }
+        /* L-dual · 촘촘한 행(긴 이력), 두 줄 행 라벨 */
+        .dual-compact .rowlabel, .dual-compact .track { height: 44px; }
+        .dual-compact .rowlabel { font-size: 24px; }
+        .dual-compact .track .val { font-size: 24px; }
+        .dual-split.dual-split-3 { grid-template-columns: 1fr 1fr 1fr; column-gap: 64px; }
+        .dual-split-3 .dual.dual-group { grid-template-columns: 120px 1fr; column-gap: 16px; }
+        .dual.dual-3 { grid-template-columns: 300px 1fr 1fr 1fr; }
+        .dual .rowlabel.stack { flex-direction: column; align-items: flex-start; justify-content: center; line-height: 1.2; }
+        .dual .rowlabel.stack small { margin-top: 4px; font-size: 22px; font-weight: 400; color: var(--color-muted); }
+        /* L-steps · 큰 연도 세로 연혁 */
+        .steps-years { display: grid; }
+        .steps-years-row { display: grid; grid-template-columns: 320px 1fr; column-gap: 64px; align-items: baseline; padding: 32px 0; border-top: 1px solid var(--color-rule); }
+        .steps-years-row:first-child { border-top: 2px solid var(--color-primary); }
+        .steps-years .yr { font-size: 64px; line-height: 1.2; font-weight: 600; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; color: var(--color-primary); }
+        .steps-years .yr.hl { color: var(--color-accent); }
+        .steps-years .what { font-size: 44px; line-height: 1.3; font-weight: 700; letter-spacing: -0.015em; }
+        .steps-years .why { margin-top: 8px; font-size: 30px; line-height: 1.45; color: var(--color-secondary); }
+        /* L-bignum · 참고 캡션 행 */
+        .bignum .read li.ref { font-size: 24px; color: var(--color-muted); }
+        /* L-checklist · 보조 영역 */
+        .checks-aside { margin-top: 56px; padding-top: 24px; border-top: 1px solid var(--color-rule); font-size: 26px; line-height: 1.35; color: var(--color-secondary); }
+        .checks-aside .lbl { margin-right: 16px; font-size: 24px; font-weight: 500; color: var(--color-muted); }
+    </style>
+    <style id="keynote">
+        /* ===========================================
+           다크 키노트 시안 (v2)
+           - 먹남색 바탕 + 위쪽 가운데 청회색 미광 하나 + 미세 노이즈
+           - 제목은 위쪽 가운데, 얇게(300). 숫자·강조만 아이스 블루
+           - 아래 kn 토큰을 기존 --color-* 토큰에 다시 연결해 31장 전체가 어두운 바탕에서 읽히게 한다
+           =========================================== */
+        :root {
+            --kn-bg: #0c0f15;
+            --kn-raise: #141922;
+            --kn-ink: #eef1f5;
+            --kn-ink-2: #b8c0cb;
+            --kn-muted: #8e97a4;
+            --kn-faint: #808996;
+            --kn-line: rgba(220, 228, 238, 0.14);
+            --kn-line-strong: rgba(220, 228, 238, 0.30);
+            --kn-accent: #8fd0e4;
+            --kn-glow: rgba(143, 208, 228, 0.28);
+            --kn-light: rgba(150, 176, 204, 0.15);
+
+            --color-primary: var(--kn-ink);
+            --color-secondary: var(--kn-ink-2);
+            --color-muted: var(--kn-muted);
+            --color-neutral: var(--kn-bg);
+            --color-surface: var(--kn-raise);
+            --color-rule: var(--kn-line);
+            --color-bar: #6c7581;
+            --color-accent: var(--kn-accent);
+            --color-accent-soft: rgba(143, 208, 228, 0.12);
+            --color-accent-ink: var(--kn-accent);
+            --color-on-accent: var(--kn-bg);
+            --color-stage: #06080b;
+
+            --font-sans: "Pretendard Variable", Pretendard, -apple-system, sans-serif;
+            --font-mono: "Pretendard Variable", Pretendard, sans-serif;
+            --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+        }
+
+        .deck-stage { font-feature-settings: "ss06"; }
+        .num, .page, .cover-date, .sk-v { font-variant-numeric: tabular-nums; }
+
+        /* 바탕: 모든 장이 같은 위치의 광원 하나를 공유한다 */
+        .slide {
+            background:
+                radial-gradient(1300px 760px at 50% -14%, var(--kn-light), transparent 72%),
+                var(--kn-bg);
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+        }
+
+        .slide::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            opacity: 0.05;
+            background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.6 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+        }
+
+        /* ===========================================
+           공통 프레임: 제목·범위는 위쪽 가운데, 본문은 여백 속에
+           =========================================== */
+        .frame { inset: 88px 112px 56px; }
+        .slide[data-mode="concept"] .frame { left: 160px; right: 160px; }
+
+        .title {
+            align-self: center;
+            max-width: 1560px;
+            text-align: center;
+            font-size: 68px;
+            line-height: 1.2;
+            font-weight: 300;
+            letter-spacing: -0.028em;
+            color: var(--kn-ink);
+        }
+
+        .title b, .title strong { font-weight: 600; }
+        .kn-em { color: var(--kn-accent); font-weight: 500; }
+
+        .scope {
+            align-self: center;
+            max-width: 1500px;
+            margin-top: 24px;
+            text-align: center;
+            font-size: 22px;
+            font-weight: 400;
+            color: var(--kn-muted);
+            text-wrap: balance;
+        }
+
+        .body { margin-top: 64px; }
+
+        .foot { font-size: 22px; font-weight: 400; color: var(--kn-faint); }
+        .foot .page { font-family: var(--font-sans); font-weight: 400; color: var(--kn-faint); }
+
+        /* 선은 흰 실선 대신 낮은 밝기의 선으로 */
+        .chain .stage, .dual .colhead, .h2h .head, .steps .step, .flow .step,
+        .flow .step.hl, .flowbar-pair h3, .steps-years-row:first-child { border-color: var(--kn-line-strong); }
+        .chain .hop, .rtrack .lo, .rtrack .hi { background: var(--kn-bg); }
+
+        /* ===========================================
+           움직임: 제목은 흐림→선명, 본문은 조금 늦게. 합계 600ms 안
+           =========================================== */
+        .reveal {
+            transform: translateY(10px);
+            transition: opacity 0.32s var(--ease), transform 0.32s var(--ease), filter 0.32s var(--ease);
+            transition-delay: calc(0.12s + var(--d, 0s) * 0.4);
+        }
+
+        .title.reveal, .cover-title.reveal {
+            transform: none;
+            filter: blur(6px);
+            transition-duration: 0.45s;
+            transition-delay: 0s;
+        }
+
+        .slide.visible .reveal { filter: none; }
+
+        .grow {
+            transition: transform 0.4s var(--ease);
+            transition-delay: calc(var(--d, 0.3s) * 0.5);
+        }
+
+        html.still .reveal, html.still .grow { transition: none !important; }
+
+        @media (prefers-reduced-motion: reduce) {
+            .reveal, .grow { transition: none !important; }
+            .reveal { filter: none !important; }
+        }
+
+        @media print {
+            .reveal, .grow { transition: none !important; }
+            .reveal { filter: none !important; }
+            .slide { background: radial-gradient(1300px 760px at 50% -14%, var(--kn-light), transparent 72%), var(--kn-bg) !important; }
+        }
+
+        /* ===========================================
+           L-cover · 화면 가운데 거대한 얇은 제목, 아래 가는 세로선, 부제, 맨 아래 날짜
+           =========================================== */
+        .cover {
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding-bottom: 24px;
+            text-align: center;
+        }
+
+        .cover-title {
+            order: 1;
+            font-size: 164px;
+            line-height: 1.1;
+            font-weight: 200;
+            letter-spacing: -0.04em;
+            text-wrap: balance;
+            color: var(--kn-ink);
+        }
+
+        .cover-title em { font-weight: 500; color: var(--kn-accent); }
+
+        .cover-mark {
+            order: 2;
+            width: 1px;
+            height: 72px;
+            margin: 56px 0 36px;
+            background: linear-gradient(to bottom, transparent, var(--kn-accent));
+        }
+
+        .cover-sub {
+            order: 3;
+            margin-top: 0;
+            max-width: 1200px;
+            font-size: 38px;
+            font-weight: 300;
+            letter-spacing: -0.01em;
+            color: var(--kn-ink-2);
+        }
+
+        .cover-date {
+            position: absolute;
+            left: 0;
+            right: 0;
+            bottom: 64px;
+            margin: 0;
+            font-family: var(--font-sans);
+            font-size: 22px;
+            font-weight: 400;
+            letter-spacing: 0.02em;
+            color: var(--kn-faint);
+        }
+
+        /* ===========================================
+           L-panels · 상자 없이 가는 세로선 하나로 나눈 두 열
+           panels-mirror: 왼쪽 열은 오른쪽 정렬, 오른쪽 열은 왼쪽 정렬(가운데 선을 축으로)
+           =========================================== */
+        .slide .panels { grid-template-columns: 1fr 1fr; gap: 0; align-items: stretch; }
+
+        .slide .panels .pane {
+            padding: 48px 96px;
+            gap: 28px;
+            background: transparent;
+        }
+
+        .slide .panels .pane + .pane {
+            background-image: linear-gradient(to bottom, transparent, var(--kn-line-strong) 18%, var(--kn-line-strong) 82%, transparent);
+            background-size: 1px 100%;
+            background-repeat: no-repeat;
+            background-position: left top;
+        }
+
+        .slide .panels h3 { font-size: 26px; font-weight: 500; letter-spacing: 0; color: var(--kn-accent); }
+        .slide .panels p { font-size: 52px; line-height: 1.36; font-weight: 300; letter-spacing: -0.02em; color: var(--kn-ink); text-wrap: balance; }
+        .slide .panels .src { margin-top: 16px; font-size: 24px; font-weight: 400; letter-spacing: 0; color: var(--kn-muted); }
+        .slide .panels-list li { font-weight: 300; }
+
+        .panels-mirror .pane:first-child { align-items: flex-end; text-align: right; }
+        .panels-mirror p { max-width: 680px; }
+        .panels-mirror .pane { padding-block: 64px; }
+
+        /* ===========================================
+           L-bignum · 숫자가 주인공. 그 아래 캡션, 가는 세로선 양쪽의 두 줄 해설, 맨 아래 참고
+           =========================================== */
+        .bignum {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+        }
+
+        .bignum .n {
+            font-size: 248px;
+            line-height: 0.95;
+            font-weight: 200;
+            letter-spacing: -0.045em;
+            color: var(--kn-accent);
+            text-shadow: 0 0 96px var(--kn-glow);
+        }
+
+        .bignum .n small { margin-left: 20px; font-size: 64px; font-weight: 300; letter-spacing: -0.01em; text-shadow: none; }
+        .bignum .cap { margin-top: 32px; font-size: 24px; color: var(--kn-muted); }
+
+        .bignum .read {
+            margin-top: 72px;
+            width: 1360px;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            align-items: center;
+        }
+
+        .bignum .read li {
+            padding: 4px 64px;
+            font-size: 30px;
+            line-height: 1.45;
+            font-weight: 300;
+            color: var(--kn-ink-2);
+            text-wrap: balance;
+        }
+
+        .bignum .read li:first-child { text-align: right; }
+        .bignum .read li + li { border-top: none; border-left: 1px solid var(--kn-line-strong); text-align: left; }
+        .bignum .read b { font-weight: 600; color: var(--kn-ink); }
+
+        .bignum .read li.ref {
+            grid-column: 1 / -1;
+            margin-top: 48px;
+            padding: 0;
+            border-left: none;
+            text-align: center;
+            font-size: 22px;
+            color: var(--kn-faint);
+        }
+
+        /* ===========================================
+           L-sankey · 띠는 반투명 밝은 회색, 설비투자 띠만 강조색으로 은은하게 빛난다
+           SVG 좌표·글자는 그대로 두고 색만 CSS로 바꾼다(인라인 style이라 !important)
+           =========================================== */
+        .slide[data-layout="sankey"] .title { font-size: 64px; }
+        .slide[data-layout="sankey"] .body { margin-top: 48px; }
+
+        .sankey path { fill: #c7d0da !important; fill-opacity: 0.12 !important; }
+        .sankey path[style*="accent"] {
+            fill: var(--kn-accent) !important;
+            fill-opacity: 0.42 !important;
+            filter: drop-shadow(0 0 22px var(--kn-glow));
+        }
+        .sankey rect { fill: #a3acb8 !important; }
+        .sankey rect[style*="color-bar"] { fill: #6c7581 !important; }
+        .sankey rect[style*="accent"] { fill: var(--kn-accent) !important; filter: drop-shadow(0 0 14px var(--kn-glow)); }
+
+        .sankey text { font-family: var(--font-sans); font-weight: 400; fill: var(--kn-ink-2); }
+        .sankey .sk-v { font-weight: 600; fill: var(--kn-ink); }
+        /* 띠 가장자리에 걸치는 보조 라벨만 바탕색 테두리(halo)를 글자 뒤에 깐다(예: '현금 지출 없는 비용') */
+        .sankey .sk-sub { paint-order: stroke; stroke: var(--kn-bg); stroke-width: 5px; stroke-linejoin: round; stroke-opacity: 0.85; }
+        .sankey .sk-flow { fill: var(--kn-ink); }
+        .sankey .sk-sub, .sankey .sk-p { fill: var(--kn-muted); }
+        .sankey .hl, .sankey .sk-v.hl { fill: var(--kn-accent); }
+
+        .sankey-note { margin-top: 32px; text-align: center; font-size: 24px; font-weight: 300; color: var(--kn-ink-2); }
+    </style>
+    <style id="keynote-light">
+        /* ===========================================
+           밝은 키노트 변형: 같은 구도, 옅은 청회 바탕 + 먹남색 글씨
+           발광(text-shadow, drop-shadow) 없음. 강조는 크기·굵기·색으로만
+           =========================================== */
+        :root {
+            --kn-bg: #f3f5f8;
+            --kn-raise: #e7ebf0;
+            --kn-ink: #0f1520;
+            --kn-ink-2: #384250;
+            --kn-muted: #566170;
+            --kn-faint: #5c6675;
+            --kn-line: rgba(15, 21, 32, 0.12);
+            --kn-line-strong: rgba(15, 21, 32, 0.24);
+            --kn-accent: #1f6d80;
+            --kn-glow: transparent;
+            --kn-light: rgba(255, 255, 255, 0.85);
+
+            --color-bar: #a4adb8;
+            --color-accent-soft: rgba(31, 109, 128, 0.10);
+            --color-stage: #dfe3e8;
+        }
+
+        .slide::before { display: none; }
+        /* 밝은 바탕에서 굵기 200은 획이 가늘게 흩어져 보여 한 단계 올린다 */
+        .cover-title { font-weight: 250; }
+        .bignum .n { font-weight: 250; text-shadow: none; }
+
+        .sankey path { fill: #9aa4b0 !important; fill-opacity: 0.22 !important; }
+        .sankey path[style*="accent"] { fill: var(--kn-accent) !important; fill-opacity: 0.30 !important; filter: none; }
+        .sankey rect { fill: #66707e !important; }
+        .sankey rect[style*="color-bar"] { fill: #9aa4b0 !important; }
+        .sankey rect[style*="accent"] { fill: var(--kn-accent) !important; filter: none; }
+        .edit-toggle { background: var(--kn-bg); }
+    </style>
+    <style id="keynote-full">
+        /* ===========================================
+           밝은 키노트 · 31장 전체 확장
+           모든 계열을 가운데 축으로: 상자 대신 선, 얇은 큰 글씨, 강조는 딥 틸 하나
+           =========================================== */
+
+        /* 바탕: 위 가운데 광원을 조금 더 밝게, 아래로 아주 옅게 가라앉혀 단색처럼 보이지 않게 */
+        :root { --kn-light: rgba(255, 255, 255, 0.95); --kn-sink: rgba(15, 21, 32, 0.045); }
+        .slide,
+        .slide.active {
+            background:
+                radial-gradient(1400px 820px at 50% -16%, var(--kn-light), transparent 70%),
+                linear-gradient(to bottom, transparent 45%, var(--kn-sink)),
+                var(--kn-bg);
+        }
+        @media print {
+            .slide { background: radial-gradient(1400px 820px at 50% -16%, var(--kn-light), transparent 70%), linear-gradient(to bottom, transparent 45%, var(--kn-sink)), var(--kn-bg) !important; }
+        }
+
+        /* 공통 프레임: 제목을 조금 내리고, 본문 묶음은 시각적 중심(살짝 위)에 */
+        .frame { top: 104px; }
+        .body.center { padding-bottom: 72px; }
+        .frame > .legend { align-self: center; justify-content: center; flex-wrap: wrap; row-gap: 8px; color: var(--kn-muted); }
+
+        /* ---------- L-checklist: 얇은 큰 번호 + 가는 선으로 나눈 세로 목록, 블록은 가운데 ---------- */
+        .checks { width: fit-content; max-width: 1400px; margin-inline: auto; gap: 0; }
+        .checks li { grid-template-columns: 128px 1fr; align-items: baseline; padding: 32px 0; }
+        .checks li + li { border-top: 1px solid var(--kn-line); }
+        .checks .n { font-family: var(--font-sans); font-size: 64px; line-height: 1; font-weight: 200; color: var(--kn-accent); }
+        .checks .q { font-size: 44px; line-height: 1.35; font-weight: 300; letter-spacing: -0.02em; }
+        .checks .cite { display: block; margin: 10px 0 0; font-size: 24px; font-weight: 400; letter-spacing: 0; color: var(--kn-muted); }
+        .checks-foot { max-width: 1300px; margin: 48px auto 0; text-align: center; font-weight: 300; text-wrap: balance; }
+        .checks-foot b { font-weight: 600; color: var(--kn-ink); }
+        .checks-aside { width: fit-content; max-width: 1400px; margin: 48px auto 0; text-align: center; font-weight: 300; }
+
+        /* ---------- L-panels: 세로선 두 열(목록·긴 문단은 왼쪽 정렬) ---------- */
+        .slide .panels { max-width: 1600px; width: 100%; margin-inline: auto; }
+        .slide .panels .pane { padding: 40px 0 40px 80px; }
+        .slide .panels .pane:first-child { padding: 40px 80px 40px 0; }
+        .slide .panels p { font-size: 44px; line-height: 1.42; }
+        .slide .panels .limit h3 { color: var(--kn-ink-2); }
+        .slide .panels .support h3 { color: var(--kn-accent); }
+        .slide .panels-list li { padding: 20px 0; font-size: 32px; line-height: 1.42; letter-spacing: -0.01em; text-wrap: balance; }
+        .slide .panels-list li:first-child { padding-top: 4px; }
+        /* 3장(거울 배치)은 내용이 짧아 크게 */
+        .panels-mirror { max-width: 1600px; }
+        .slide .panels-mirror p { font-size: 44px; line-height: 1.5; max-width: 680px; }
+        .slide .panels-mirror h3 { font-size: 28px; color: var(--kn-accent); }
+        .slide .panels-mirror .src { font-size: 26px; }
+
+        /* ---------- L-compare: 가운데 화살표 열을 축으로 Before(오른쪽 정렬·흐림) | After(왼쪽 정렬·진함) ---------- */
+        .compare, .compare.compare-wide {
+            width: 100%;
+            max-width: 1560px;
+            margin-inline: auto;
+            grid-template-columns: 1fr 120px 1fr;
+            column-gap: 0;
+        }
+        .compare .head { padding-bottom: 16px; font-size: 24px; font-weight: 500; color: var(--kn-muted); }
+        .compare .head:first-child { text-align: right; }
+        .compare .head.after { color: var(--kn-accent); }
+        .compare .cell { padding: 28px 0; border-top: none; font-size: 38px; line-height: 1.38; letter-spacing: -0.015em; }
+        .compare .cell.before { text-align: right; font-weight: 300; color: var(--kn-muted); }
+        .compare .cell.after { font-weight: 400; color: var(--kn-ink); }
+        .compare .cell.to { font-family: var(--font-sans); font-weight: 200; color: var(--kn-accent); }
+        .compare .cell small { font-size: 24px; font-weight: 400; color: var(--kn-muted); }
+        .compare-note { margin-top: 40px; text-align: center; font-weight: 300; color: var(--kn-ink-2); }
+
+        /* ---------- L-flowbar: 점과 가는 선으로 이은 가로 단계, 아래 묶음은 가운데 ---------- */
+        .flow { position: relative; padding-top: 44px; width: 100%; max-width: 1600px; margin-inline: auto; }
+        .flow::before {
+            content: "";
+            position: absolute;
+            top: 4px;
+            left: calc((100% - 168px) / 8);
+            right: calc((100% - 168px) / 8);
+            height: 1px;
+            background: var(--kn-line-strong);
+        }
+        .flow .step,
+        .flow .step.hl { position: relative; padding-top: 0; border-top: none; text-align: center; font-size: 38px; line-height: 1.3; font-weight: 300; letter-spacing: -0.02em; color: var(--kn-ink-2); }
+        .flow .step::before {
+            content: "";
+            position: absolute;
+            top: -45px;
+            left: 50%;
+            width: 11px;
+            height: 11px;
+            margin-left: -5.5px;
+            border-radius: 50%;
+            border: 1px solid var(--kn-ink-2);
+            background: var(--kn-bg);
+        }
+        .flow .step.hl { font-weight: 500; color: var(--kn-accent); }
+        .flow .step.hl::before { border-color: var(--kn-accent); background: var(--kn-accent); }
+        .flow .step small { margin-top: 10px; font-size: 24px; line-height: 1.35; color: var(--kn-muted); text-wrap: balance; }
+        .flow .to { padding-top: 0; font-size: 30px; font-weight: 200; color: var(--kn-muted); }
+        .flowbar-aux { max-width: 1300px; margin: 96px auto 0; text-align: center; font-weight: 300; color: var(--kn-ink-2); }
+        .flowbar-pair { width: 100%; max-width: 1500px; margin: 104px auto 0; column-gap: 128px; }
+        .flowbar-pair h3 { border-bottom: 1px solid var(--kn-line-strong); font-size: 24px; font-weight: 500; color: var(--kn-ink-2); }
+        .flowbar-row { font-weight: 400; }
+
+        /* ---------- L-chain: 얇은 큰 단계 이름, 가는 선과 꺾쇠, 칩은 강조색 글자+테두리 ---------- */
+        .chain { width: 100%; max-width: 1600px; margin-inline: auto; column-gap: 56px; }
+        .chain .stage { padding-top: 40px; border-top: 1px solid var(--kn-line-strong); text-align: center; }
+        .chain .hop { top: -26px; right: -44px; font-weight: 200; color: var(--kn-muted); }
+        .chain .name { font-size: 40px; font-weight: 300; letter-spacing: -0.025em; }
+        .chain .sub { margin-top: 10px; color: var(--kn-muted); }
+        .chain .who { align-items: center; margin-top: 28px; }
+        .chain .who li { font-size: 26px; font-weight: 400; color: var(--kn-ink-2); }
+        .chip { padding: 4px 16px; border: 1px solid var(--kn-accent); border-radius: 999px; background: transparent; color: var(--kn-accent) !important; font-weight: 500 !important; }
+        .legend .sw.chip { width: 26px; height: 18px; padding: 0; }
+        .chain-dir { text-align: center; margin-bottom: 32px; }
+        .chain-input { justify-content: center; }
+        .chain-money { justify-content: center; width: fit-content; margin-inline: auto; padding-inline: 48px; border-top-color: var(--kn-line); font-weight: 400; }
+        .chain-money > span:not(.lbl):not(.to) { font-weight: 500; }
+        .chain-legend, .slide .legend.chain-legend { justify-content: center; }
+        .chain-note { max-width: 1400px; margin-inline: auto; text-align: center; font-weight: 300; }
+
+        /* ---------- L-dual: 가는 막대, 행 라벨은 막대 쪽으로 오른쪽 정렬, 열 머리는 작은 회색 ---------- */
+        .dual-split, .slide .body > .dual { width: 100%; max-width: 1500px; margin-inline: auto; }
+        .dual-split { column-gap: 128px; }
+        .dual-split.dual-split-3 { max-width: 1640px; column-gap: 80px; }
+        .dual .colhead { padding-bottom: 16px; border-bottom: 1px solid var(--kn-line-strong); font-size: 24px; font-weight: 500; color: var(--kn-ink-2); }
+        .dual .colhead small { font-weight: 400; }
+        .dual .rowlabel { justify-content: flex-end; text-align: right; font-weight: 400; color: var(--kn-ink-2); }
+        .dual .rowlabel.stack { align-items: flex-end; }
+        .track .bar { height: 14px; }
+        .dual-compact .track .bar { height: 12px; }
+        .track .val { font-weight: 500; color: var(--kn-ink-2); }
+        .dual-note { max-width: 1400px; margin: 48px auto 0; text-align: center; font-weight: 300; text-wrap: balance; }
+
+        /* ---------- L-h2h: 위 작은 회색 이름, 가운데 얇은 큰 숫자, 열은 세로선으로 ---------- */
+        .h2h { column-gap: 0; justify-content: center; }
+        .h2h:not(.h2h-4) { grid-template-columns: 300px 520px 520px; }
+        .h2h.h2h-4 { grid-template-columns: 220px repeat(4, 340px); column-gap: 0; }
+        .h2h .head { padding-bottom: 20px; border-bottom: none; text-align: center; font-size: 28px; font-weight: 500; letter-spacing: -0.01em; color: var(--kn-muted); }
+        .h2h-4 .head { font-size: 28px; }
+        .h2h .head, .h2h .cell { border-left: 1px solid var(--kn-line); }
+        .h2h .metric { padding-right: 40px; text-align: right; font-size: 28px; font-weight: 400; line-height: 1.3; color: var(--kn-ink-2); }
+        .h2h .cell { text-align: center; padding-inline: 32px; }
+        .h2h .big { font-size: 104px; font-weight: 250; letter-spacing: -0.04em; }
+        .h2h-4 .big { font-size: 64px; font-weight: 300; }
+        .h2h .big.hl { color: var(--kn-accent); }
+        .h2h .gap { border-top-color: var(--kn-line); }
+        .h2h .none { font-weight: 300; }
+        .h2h .dtrack { width: 72%; margin: 28px auto 0; }
+        .h2h .dtrack .pos, .h2h .dtrack .neg { height: 10px; top: 3px; }
+        .h2h .dtrack::before { background: var(--kn-line-strong); width: 1px; }
+        .h2h-note { margin: 64px auto 0; text-align: center; font-weight: 300; text-wrap: balance; }
+        .h2h-note b { color: var(--kn-ink); }
+
+        /* ---------- L-steps: 가운데 세로선 양쪽, 왼쪽은 얇은 큰 연도(오른쪽 정렬), 오른쪽은 내용 ---------- */
+        .steps-years { width: 100%; max-width: 1500px; margin-inline: auto; }
+        .steps-years-row,
+        .steps-years-row:first-child { grid-template-columns: 1fr 1.3fr; column-gap: 0; padding: 0; border-top: none; align-items: baseline; }
+        .steps-years .yr { padding: 28px 64px 28px 0; text-align: right; font-size: 88px; line-height: 1.1; font-weight: 200; letter-spacing: -0.04em; color: var(--kn-ink-2); }
+        .steps-years .yr.hl { color: var(--kn-accent); font-weight: 300; }
+        .steps-years-row > div:last-child { align-self: stretch; padding: 40px 0 28px 64px; border-left: 1px solid var(--kn-line-strong); }
+        .steps-years .what { font-size: 40px; font-weight: 400; letter-spacing: -0.02em; }
+        .steps-years .why { font-size: 28px; font-weight: 300; color: var(--kn-ink-2); text-wrap: balance; }
+
+        /* ---------- L-quotes: 흔한 표현은 흐린 대형 얇은 글씨, 판정은 가운데 진하게 ---------- */
+        .quotes { display: flex; flex-direction: column; align-items: center; text-align: center; }
+        .quotes ul { display: flex; gap: 120px; }
+        .quotes li { font-size: 104px; line-height: 1.1; font-weight: 200; letter-spacing: -0.04em; color: #7f8a98; }
+        .quotes .verdict { margin-top: 72px; font-size: 44px; line-height: 1.4; font-weight: 300; letter-spacing: -0.02em; }
+        .quotes .verdict .hl { font-weight: 600; }
+        .quotes .verdict-sub { margin-top: 28px; }
+
+        /* ---------- L-range: 회사 이름은 막대 쪽으로 오른쪽 정렬, 0선은 가는 진한 선 ---------- */
+        .range-wrap { width: 100%; max-width: 1560px; margin-inline: auto; }
+        .range .who { align-items: flex-end; text-align: right; }
+        .range .who b { font-size: 30px; font-weight: 500; }
+        .rtrack .span { top: 41px; height: 14px; }
+        .rtrack .lo, .rtrack .hi { font-weight: 500; }
+        .axis-layer .zero { width: 1px; background: var(--kn-ink-2); }
+        .axis-layer .tick { font-family: var(--font-sans); color: var(--kn-faint); }
+        .caveat { max-width: 1400px; margin: 32px auto 0; text-align: center; font-weight: 300; text-wrap: balance; }
+        .range-events { width: fit-content; margin: 32px auto 0; }
+        .range-events li { grid-template-columns: 120px 1fr; font-weight: 300; }
+        .range-events .d { font-family: var(--font-sans); text-align: right; padding-right: 32px; }
+
+        /* ---------- L-bignum(해설 3줄, 참고 없음): 세 열을 세로선으로 ---------- */
+        .bignum .read:not(:has(.ref)) { width: 1560px; grid-template-columns: repeat(3, 1fr); }
+        .bignum .read:not(:has(.ref)) li { padding: 4px 48px; text-align: center; }
+        .bignum .read:not(:has(.ref)) li + li { border-left: 1px solid var(--kn-line-strong); text-align: center; }
+
+        /* ---------- L-close: 왼쪽 요약 세 줄(크고 얇게), 세로선 오른쪽에 토론 질문 ---------- */
+        .close { width: 100%; max-width: 1640px; margin-inline: auto; grid-template-columns: 1.25fr 1fr; column-gap: 0; align-items: center; }
+        .claims { padding-right: 80px; }
+        .claims li { grid-template-columns: 72px 1fr; padding: 28px 0; }
+        .claims li + li { border-top-color: var(--kn-line); }
+        .close .claims .k { font-family: var(--font-sans); font-size: 44px; line-height: 1.3; font-weight: 200; color: var(--kn-accent); }
+        .close .claims p { font-size: 38px; line-height: 1.4; font-weight: 300; letter-spacing: -0.02em; }
+        .close .panel { align-self: stretch; display: flex; flex-direction: column; justify-content: center; padding: 24px 0 24px 80px; background: transparent; border-left: 1px solid var(--kn-line-strong); }
+        .panel .label { font-size: 24px; font-weight: 500; color: var(--kn-accent); }
+        .close-qs { gap: 28px; margin-top: 28px; }
+        .close-qs li { grid-template-columns: 52px 1fr; font-size: 34px; line-height: 1.38; font-weight: 300; }
+        .close-qs .ord { font-family: var(--font-sans); font-weight: 300; color: var(--kn-accent); }
+    </style>
+<style id="keynote-polish">
+        /* ===========================================
+           약점 다듬기
+           =========================================== */
+        /* (c) flowbar: 점·선 장식을 빼고 화면 글자 화살표(→)가 연결선 역할을 한다 */
+        .flow { padding-top: 0; align-items: start; }
+        .flow::before, .flow .step::before { display: none; }
+        .flow .step, .flow .step.hl { font-size: 44px; line-height: 1.25; }
+        .flow .to { padding-top: 0; font-size: 44px; line-height: 1.25; font-weight: 200; color: #8a94a1; }
+        .flow .step small { margin-top: 14px; font-size: 24px; }
+        .kn-nowrap { white-space: nowrap; }
+        .flowbar-aux { font-size: 32px; }
+
+        /* (a) 문단만 있는 개념 장 패널(6·13·20): 글씨를 키워 화면을 채운다 */
+        .slide[data-mode="concept"] .panels:not(.panels-mirror):not(:has(.panels-list)) .pane { gap: 32px; padding-block: 48px; }
+        .slide[data-mode="concept"] .panels:not(.panels-mirror):not(:has(.panels-list)) h3 { font-size: 28px; }
+        .slide[data-mode="concept"] .panels:not(.panels-mirror):not(:has(.panels-list)) p { font-size: 44px; line-height: 1.5; letter-spacing: -0.02em; max-width: 680px; }
+        .slide[data-mode="concept"] .panels:not(.panels-mirror):not(:has(.panels-list)) .src { font-size: 26px; }
+
+        /* (b) 26장: 세 묶음 막대의 행 간격·글자·라벨 열을 넓힌다 */
+        .dual-split.dual-split-3 { max-width: 1696px; column-gap: 96px; }
+        .dual-split-3 .dual.dual-group { grid-template-columns: 136px 1fr; column-gap: 24px; }
+        .dual-split-3 .dual-compact .rowlabel, .dual-split-3 .dual-compact .track { height: 50px; }
+        .dual-split-3 .dual-compact .rowlabel, .dual-split-3 .dual-compact .track .val { font-size: 26px; }
+        .dual-split-3 .colhead { margin-bottom: 12px; }
+        .slide[data-layout="dual"] .dual-split-3 + .dual-note { margin-top: 36px; }
+    </style>
+<style id="keynote-critique">
+        /* ===========================================
+           비평 1라운드 반영(디자인 결함만)
+           =========================================== */
+        /* 바닥줄: 모든 장에서 좌우 160px(data 장 frame 112px + 48px) */
+        .slide[data-mode="data"] .foot { margin-inline: 48px; }
+
+        /* panels: 본문 44px로 통일(제목 68px 대비 0.65). 빈 화면은 열 폭·간격으로 메운다 */
+        .slide .panels { max-width: 1440px; }
+        .slide .panels .pane { gap: 28px; }
+        .slide .panels-list li { font-size: 36px; line-height: 1.45; }
+        .slide .panels:has(.panels-list) { align-items: center; }
+        .slide .panels:has(.panels-list) .pane { justify-content: center; }
+        .body.center:has(> .panels) { padding-bottom: 96px; }
+
+        /* S19: 틀린 문구는 작게 + 취소선 + '흔한 오해' 라벨, 정답 줄이 주인공 */
+        .quotes-label { font-size: 22px; font-weight: 500; letter-spacing: 0.02em; color: var(--kn-muted); }
+        .quotes ul { margin-top: 16px; gap: 72px; }
+        .quotes li { font-size: 64px; font-weight: 300; color: var(--kn-muted); text-decoration: line-through 2px var(--kn-muted); }
+        .quotes .verdict { margin-top: 64px; font-size: 36px; line-height: 1.45; font-weight: 300; }
+        .quotes .verdict .kn-answer { display: inline-block; margin-bottom: 12px; font-size: 56px; line-height: 1.25; font-weight: 500; letter-spacing: -0.025em; color: var(--kn-ink); }
+        .quotes .verdict .kn-answer .hl { font-weight: 600; }
+
+        /* S10(compare 계열): 메타 라벨·화살표는 중립색, 틸은 한정 표현에만 */
+        .compare .head.after { color: var(--kn-ink-2); }
+        .compare .cell.to { color: var(--kn-faint); }
+        .compare .cell.after .hl { color: var(--kn-accent); font-weight: 500; }
+        .compare .cell.after { text-wrap: balance; }
+
+        /* S22: 해설 세 칸 줄 균형 */
+        .bignum .read:not(:has(.ref)) li { max-width: 520px; justify-self: center; }
+
+        /* S24: 행 라벨이 두 줄이라 행 간격을 100px로 */
+        .dual.dual-3 .rowlabel, .dual.dual-3 .track { height: 100px; }
+
+        /* S26: 왼쪽 묶음 아래 빈칸에 주석, 가운데 묶음 행 간격 46px */
+        .dual-split.dual-split-3 { margin-top: 24px; }
+        .dual-split-3 .dual-compact .rowlabel, .dual-split-3 .dual-compact .track { height: 46px; }
+        .kn-col { display: flex; flex-direction: column; gap: 56px; }
+        .kn-col .kn-side-note { margin: 0; padding-top: 24px; border-top: 1px solid var(--kn-line); text-align: left; font-size: 26px; line-height: 1.5; color: var(--kn-ink-2); text-wrap: pretty; }
+
+        /* S7·S16: 알약 테두리 없이 틸 글자 500, 범례는 글자 견본 */
+        .chip { padding: 0; border: none; border-radius: 0; background: transparent; }
+        .chain-legend .sw.chip { display: none; }
+        .chain-legend .key { color: var(--kn-accent); font-weight: 500; }
+        /* S7: 돈 흐름 줄은 가볍게, 두 가로선 폭을 같게(1600px) */
+        .chain-money { width: 100%; max-width: 1600px; justify-content: center; }
+        .chain-money > span:not(.lbl):not(.to) { font-weight: 400; color: var(--kn-ink-2); }
+
+        /* S21·S28: 값 라벨 칩 배경 없음 */
+        .rtrack .lo, .rtrack .hi { background: transparent; padding: 0; }
+
+        /* S11: 행 높이 170px 통일, 행 라벨을 숫자 기준선에 */
+        .h2h-4 > .metric, .h2h-4 > .cell { min-height: 170px; }
+        .h2h-4 > .metric { padding-top: 57px; line-height: 1.3; }
+        .h2h-4 .none { margin-top: 35px; line-height: 1.3; }
+
+        /* S14: 값 라벨을 막대 끝 12px 옆에 */
+        .flowbar-row { grid-template-columns: 200px 1fr; }
+        .flowbar-row .dtrack .val { position: absolute; top: 50%; height: auto; width: auto; transform: translateY(-50%); white-space: nowrap; background: transparent; }
+        .flowbar-row .dtrack .val.at-pos { left: calc((0 - var(--min)) / var(--span) * 100% + var(--v) / var(--span) * 100% + 12px); }
+        /* 음수 막대는 축 최솟값 가까이까지 뻗어 행 라벨과 부딪히므로, 값은 막대의 0선 쪽 끝 12px 옆에 둔다 */
+        .flowbar-row .dtrack .val.at-neg { left: calc((0 - var(--min)) / var(--span) * 100% + 12px); }
+
+        /* S27: 보조 라벨 halo 제거(위치는 SVG 글자 좌표로 옮김) */
+        .sankey .sk-sub { stroke: none; paint-order: normal; }
+    </style>
+<style id="print-glyph-fix">/* 인쇄 시 tnum·ss06 대체 글리프가 PDF 글자층에서 사용자 정의 영역 문자로 깨지는 문제 방지 */@media print{*{font-variant-numeric:normal!important;font-feature-settings:normal!important}}</style>
+</head>
+<body>
+    <div class="deck-viewport">
+        <main class="deck-stage" id="deckStage">
+
+            <!-- 1 · cover -->
+            <section class="slide active" data-layout="cover" data-mode="data" aria-label="표지">
+                <div class="cover">
+                    <div class="cover-mark reveal"></div>
+                    <h1 class="cover-title reveal" style="--d:0.08s">병목은<br><em>이익</em>을 가져가는가</h1>
+                    <p class="cover-sub reveal" style="--d:0.2s">AI 시대 반도체 지도와 SK하이닉스</p>
+                    <p class="cover-date reveal" style="--d:0.3s">2026-10-15 기준</p>
+                </div>
+                <aside class="notes"><p>오늘 제목은 질문입니다. "병목은 이익을 가져가는가." 지도를 그리고, 숫자로 어디까지 맞는지 같이 따져 보는 30분입니다.</p></aside>
+            </section>
+
+            <!-- 2 · checklist -->
+            <section class="slide" data-layout="checklist" data-mode="concept" aria-label="오늘의 질문">
+                <div class="frame">
+                    <h2 class="title reveal">오늘 따라갈 질문은 세 개다</h2>
+                    <div class="body center">
+                        <ol class="checks">
+                            <li class="reveal" style="--d:0.12s"><span class="n ord">1</span><span class="q">병목은 어디인가?<span class="cite">산업 지도</span></span></li>
+                            <li class="reveal" style="--d:0.2s"><span class="n ord">2</span><span class="q">이익은 어디로 갔나?<span class="cite">단계별 영업이익률</span></span></li>
+                            <li class="reveal" style="--d:0.28s"><span class="n ord">3</span><span class="q">그 이익은 오래가나?<span class="cite">SK하이닉스 사이클</span></span></li>
+                        </ol>
+                        <p class="checks-foot reveal" style="--d:0.4s">답의 범위를 먼저 밝힌다: 비교한 단계 중 <b>메모리 회사</b>의 이익률이 팹리스에 가장 가깝다. 병목별 이익은 떼어 볼 수 없다.</p>
+                    </div>
+                    <footer class="foot"><span>답의 근거: 12·13장(단계별 영업이익률, financial-analysis 산출물)</span><span class="page"></span></footer>
+                </div>
+                <aside class="notes"><p>결론 먼저요. 비교한 단계 중 메모리 회사의 이익률이 팹리스에 가장 가까워요. 다만 그게 HBM이라는 병목 덕분인지는 재무로 떼어 볼 수 없어요. 장비는 팹리스보다 이익률이 낮고, CoWoS는 따로 떼어 본 숫자가 없어요.</p><p>세 질문: 병목은 어디인가(지도), 이익은 어디로 갔나(재무), 그 이익은 오래가나(SK하이닉스).</p></aside>
+            </section>
+
+            <!-- 3 · panels -->
+            <section class="slide" data-layout="panels" data-mode="concept" aria-label="로직과 메모리">
+                <div class="frame">
+                    <h2 class="title reveal">AI 반도체의 두 축은 계산하는 로직과 저장하는 메모리다</h2>
+                    <p class="scope reveal" style="--d:0.08s">회사 유형: 팹리스(설계만), 파운드리(생산 대행), IDM(설계·생산 모두), OSAT(후공정 외주)</p>
+                    <div class="body center">
+                        <div class="panels panels-even panels-mirror">
+                            <div class="pane limit reveal" style="--d:0.15s">
+                                <h3>로직: 계산</h3>
+                                <p>CPU, GPU, AI 가속기. 설계와 생산을 나누는 경우가 많다.</p>
+                                <p class="src">팹리스 NVIDIA · 파운드리 TSMC</p>
+                            </div>
+                            <div class="pane limit reveal" style="--d:0.3s">
+                                <h3>메모리: 저장</h3>
+                                <p>D램, 낸드, HBM. 대형 3사는 설계부터 생산까지 한다.</p>
+                                <p class="src">IDM SK하이닉스 · 삼성전자 · 마이크론</p>
+                            </div>
+                        </div>
+                    </div>
+                    <footer class="foot"><span>용어 정리(research 1.1~1.2)</span><span class="page"></span></footer>
+                </div>
+                <aside class="notes"><p>로직은 계산, 메모리는 저장. 이 덱이 다루는 AI 반도체 기준이에요(아날로그·전력 반도체는 빼요). 로직은 설계와 생산을 나누는 경우가 많고(팹리스·파운드리, Intel·삼성은 둘 다 함), 메모리 대형 3사는 다 직접 합니다(IDM).</p><p>OSAT는 후공정을 외주로 하는 회사(Amkor 등).</p></aside>
+            </section>
+
+            <!-- 4 · compare -->
+            <section class="slide" data-layout="compare" data-mode="concept" aria-label="HBM이란">
+                <div class="frame">
+                    <h2 class="title reveal">HBM은 DRAM을 수직으로 쌓아 GPU 바로 옆에 붙인 메모리다</h2>
+                    <div class="body center">
+                        <div class="compare reveal" style="--d:0.15s">
+                            <div class="head">일반 D램</div><div></div><div class="head after">HBM</div>
+                            <div class="cell before">프로세서와 떨어진 보드 위</div><div class="cell to">→</div><div class="cell after">GPU 바로 옆, 같은 기판 위</div>
+                            <div class="cell before">다이 한 장씩</div><div class="cell to">→</div><div class="cell after">D램 다이를 수직으로 쌓고 TSV로 관통 연결</div>
+                            <div class="cell before">좁은 데이터 통로</div><div class="cell to">→</div><div class="cell after">HBM4 인터페이스 2,048bit</div>
+                        </div>
+                    </div>
+                    <footer class="foot"><span>출처: JEDEC JESD270-4(HBM4 표준), 2025-04-16</span><span class="page"></span></footer>
+                </div>
+                <aside class="notes"><p>HBM은 DRAM을 위로 쌓아서 GPU 바로 옆에 붙인 거예요. 통로가 HBM4 기준 2,048개라 한꺼번에 많이 나릅니다.</p></aside>
+            </section>
+
+            <!-- 5 · flowbar -->
+            <section class="slide" data-layout="flowbar" data-mode="concept" aria-label="칩 제조 과정">
+                <div class="frame">
+                    <h2 class="title reveal">칩은 전공정 단위 공정을 층마다 반복한 뒤<br>테스트·패키징을 거쳐 나온다</h2>
+                    <div class="body center">
+                        <div class="flow reveal" style="--d:0.15s">
+                            <div class="step">웨이퍼<small>원판 제조</small></div><div class="to">→</div>
+                            <div class="step hl">전공정<small>산화·포토·식각·증착·배선, 층마다 반복</small></div><div class="to">→</div>
+                            <div class="step">웨이퍼 테스트<small>EDS 검사</small></div><div class="to">→</div>
+                            <div class="step">패키징·테스트<small>후공정</small></div>
+                        </div>
+                        <p class="flowbar-aux reveal" style="--d:0.3s">참고 분류: SK하이닉스는 전 과정을 8대 공정으로 나눈다.<br>웨이퍼 제조, 산화, 포토, 식각, 증착·이온주입, 금속 배선, EDS, 패키징.</p>
+                    </div>
+                    <footer class="foot"><span>출처: SK하이닉스 뉴스룸, 반도체 hy-스쿨2 제조 8대 공정(2026-07-01)</span><span class="page"></span></footer>
+                </div>
+                <aside class="notes"><p>8대 공정을 층마다 반복하는 구조예요. 웨이퍼 테스트 → 후공정 → 최종 테스트로 끝납니다.</p></aside>
+            </section>
+
+            <!-- 6 · panels -->
+            <section class="slide" data-layout="panels" data-mode="concept" aria-label="수율">
+                <div class="frame">
+                    <h2 class="title reveal">HBM은 다이 수율에 적층·접합 수율까지 겹쳐<br>만들기 어렵다</h2>
+                    <p class="scope reveal" style="--d:0.08s">양품 다이당 원가 = 웨이퍼 원가 ÷ (넷 다이 × 수율). 곱셈은 쌓은 층이 모두 양품이어야 하는 경우의 가정</p>
+                    <div class="body center">
+                        <div class="panels">
+                            <div class="pane limit reveal" style="--d:0.15s">
+                                <h3>다이 수율</h3>
+                                <p>웨이퍼 한 장의 원가는 정해져 있다. 그래서 다이 수율이 곧 원가다.</p>
+                            </div>
+                            <div class="pane support reveal" style="--d:0.3s">
+                                <h3>HBM에서 더해지는 것</h3>
+                                <p>다이를 쌓고 붙이는 <span class="kn-nowrap">적층·접합에도</span> 수율이 있다. 쌓은 층이 모두 양품이어야 한다면 층마다 수율이 곱해진다.</p>
+                            </div>
+                        </div>
+                    </div>
+                    <footer class="foot"><span>개념 설명(research 2.3), 수치 없음</span><span class="page"></span></footer>
+                </div>
+                <aside class="notes"><p>두 가지 수율을 나눠 보세요. 먼저 다이 수율: 웨이퍼 한 장 원가는 정해져 있으니 다이 수율이 곧 원가예요.</p><p>HBM은 여기에 적층·접합 수율이 더해집니다. 쌓은 층이 하나라도 불량이면 묶음 전체가 손해인 경우라면, 층마다 수율이 곱해져요. 이게 진입장벽입니다.</p></aside>
+            </section>
+
+            <!-- 7 · chain -->
+            <section class="slide" data-layout="chain" data-mode="concept" aria-label="반도체 밸류체인">
+                <div class="frame">
+                    <h2 class="title reveal">제품은 설계에서 수요처로, 돈은 수요처에서<br>장비·소재로 거꾸로 흐른다</h2>
+                    <div class="body center">
+                        <p class="chain-dir reveal" style="--d:0.1s">제품 흐름 →</p>
+                        <ol class="chain" style="--n:5">
+                            <li class="stage reveal" style="--d:0.15s"><div class="name">설계IP·EDA</div><div class="sub">설계 도구</div><ul class="who"><li>Synopsys</li></ul><span class="hop" aria-hidden="true">›</span></li>
+                            <li class="stage reveal" style="--d:0.22s"><div class="name">팹리스</div><div class="sub">칩 설계</div><ul class="who"><li>NVIDIA</li></ul><span class="hop" aria-hidden="true">›</span></li>
+                            <li class="stage reveal" style="--d:0.29s"><div class="name">제조</div><div class="sub">메모리 IDM·파운드리</div><ul class="who"><li class="chip">SK하이닉스</li></ul><span class="hop" aria-hidden="true">›</span></li>
+                            <li class="stage reveal" style="--d:0.36s"><div class="name">패키징·테스트</div><div class="sub">CoWoS·후공정</div><ul class="who"><li>TSMC</li></ul><span class="hop" aria-hidden="true">›</span></li>
+                            <li class="stage reveal" style="--d:0.43s"><div class="name">수요처</div><div class="sub">데이터센터·기기</div><ul class="who"><li>하이퍼스케일러</li></ul></li>
+                        </ol>
+                        <p class="chain-input reveal" style="--d:0.5s"><span class="lbl">장비·소재는 제조 단계에 들어가는 투입이다</span></p>
+                        <p class="chain-money reveal" style="--d:0.6s"><span class="lbl">← 돈 흐름</span><span>장비·소재</span><span class="to">←</span><span>제조·패키징</span><span class="to">←</span><span>팹리스</span><span class="to">←</span><span>수요처 CapEx</span></p>
+                        <div class="legend chain-legend reveal" style="margin-top:40px; --d:0.7s"><span class="key"><span class="sw chip"></span>한국 기업</span></div>
+                    </div>
+                    <footer class="foot"><span>산업 구조: research 1장(sector-mapping), 기업명은 facts.csv 표본 종목</span><span class="page"></span></footer>
+                </div>
+                <aside class="notes"><p>위 줄은 제품 흐름이에요. 설계 → 팹리스 → 제조 → 패키징·테스트 → 수요처. 단계마다 대표 회사 하나만 적었습니다.</p><p>다른 대표 회사: 팹리스 Broadcom, 제조 삼성전자·TSMC·마이크론, 패키징 Amkor. 장비는 ASML·AMAT·원익IPS·한미반도체, 소재는 솔브레인.</p><p>아래 줄은 돈 흐름. 수요처의 CapEx가 칩 회사로, 칩 회사·파운드리의 설비투자가 장비·소재로 거꾸로 흘러갑니다.</p><p>병목 세 곳: 장비의 EUV(ASML), 패키징의 CoWoS(TSMC), 메모리의 HBM.</p></aside>
+            </section>
+
+            <!-- 8 · bignum -->
+            <section class="slide" data-layout="bignum" data-mode="data" aria-label="하이퍼스케일러 CapEx">
+                <div class="frame">
+                    <h2 class="title reveal">돈의 출발점은 하이퍼스케일러 4사의 2026 CapEx<br>약 7,250억 달러다</h2>
+                    <p class="scope reveal" style="--d:0.08s">Yahoo Finance 집계, 2026 가이던스</p>
+                    <div class="body center">
+                        <div class="bignum">
+                            <div class="reveal" style="--d:0.15s">
+                                <div class="n num">7,250<small>억 달러</small></div>
+                                <p class="cap">하이퍼스케일러 4사 2026 CapEx 합계(약), 2026-08 보도</p>
+                            </div>
+                            <ul class="read reveal" style="--d:0.3s">
+                                <li><b>마이크로소프트</b>: 2026 CapEx 중 250억 달러는 부품 가격 상승분</li>
+                                <li>메모리 값이 오르면 같은 투자도 <b>금액이 커진다</b></li>
+                                <li class="ref">참고: 2026 세계 반도체 시장 1.51조 달러 중 메모리 약 8,000억 달러(WSTS 전망)</li>
+                            </ul>
+                        </div>
+                    </div>
+                    <footer class="foot"><span>출처: Yahoo Finance(2026-08, 2026 가이던스 기준), WSTS Spring 2026 Forecast(2026-06)</span><span class="page"></span></footer>
+                </div>
+                <aside class="notes"><p>돈은 빅테크 데이터센터 투자에서 출발해요. MS는 CapEx 중 250억 달러가 부품 값 오른 몫이라고 했어요. 메모리 값이 투자 금액을 부풀립니다.</p><p>4사 합계는 출처마다 범위가 달라 Yahoo 값 하나만 씁니다. 세계 시장 1.51조 달러 중 메모리가 약 8,000억 달러(WSTS 전망).</p></aside>
+            </section>
+
+            <!-- 9 · dual -->
+            <section class="slide" data-layout="dual" data-mode="data" aria-label="CapEx 강도">
+                <div class="frame">
+                    <h2 class="title reveal">자본이 묶이는 곳은 설계가 아니라 제조 단계다</h2>
+                    <p class="scope reveal" style="--d:0.08s">CapEx/매출, 최신 FY, n=8: 설계 3종목 1.0~2.8%, 제조 5종목 15.6~33.7%</p>
+                    <div class="body center">
+                        <div class="dual-split reveal" style="--d:0.15s">
+                            <div class="dual dual-group" style="--max:35">
+                                <div class="colhead">설계<small>CapEx/매출 %</small></div>
+                                <div class="rowlabel">NVIDIA</div>
+                                <div class="track"><div class="bar grow" style="--v:2.798"></div><span class="val num">2.8</span></div>
+                                <div class="rowlabel">Synopsys</div>
+                                <div class="track"><div class="bar grow" style="--v:2.4022"></div><span class="val num">2.4</span></div>
+                                <div class="rowlabel">Broadcom</div>
+                                <div class="track"><div class="bar grow" style="--v:0.9752"></div><span class="val num">1.0</span></div>
+                            </div>
+                            <div class="dual dual-group" style="--max:35">
+                                <div class="colhead">제조<small>CapEx/매출 %</small></div>
+                                <div class="rowlabel">TSMC</div>
+                                <div class="track"><div class="bar grow hl" style="--v:33.6723"></div><span class="val hl num">33.7</span></div>
+                                <div class="rowlabel">SK하이닉스</div>
+                                <div class="track"><div class="bar grow hl" style="--v:29.4188"></div><span class="val hl num">29.4</span></div>
+                                <div class="rowlabel">Intel</div>
+                                <div class="track"><div class="bar grow hl" style="--v:27.7108"></div><span class="val hl num">27.7</span></div>
+                                <div class="rowlabel">Micron</div>
+                                <div class="track"><div class="bar grow hl" style="--v:23.0591"></div><span class="val hl num">23.1</span></div>
+                                <div class="rowlabel">삼성전자</div>
+                                <div class="track"><div class="bar grow hl" style="--v:15.6332"></div><span class="val hl num">15.6</span></div>
+                            </div>
+                        </div>
+                        <p class="dual-note reveal" style="--d:0.3s">삼성전자는 전사 기준. NVIDIA·Micron은 FY2026, 나머지는 FY2025.</p>
+                    </div>
+                    <footer class="foot"><span>출처: financial-analysis 산출물(SEC EDGAR·yfinance), 2026-10-15 수집</span><span class="page"></span></footer>
+                </div>
+                <aside class="notes"><p>설계 회사는 공장에 돈을 거의 안 쓰고, 제조 회사는 매출의 큰 몫을 설비에 씁니다. 8종목 중 반례는 없어요. 장비·후공정은 그 사이.</p></aside>
+            </section>
+
+            <!-- 10 · compare -->
+            <section class="slide" data-layout="compare" data-mode="concept" aria-label="병목 세 곳">
+                <div class="frame">
+                    <h2 class="title reveal">병목 세 곳의 ‘독점’에는 모두 조건이 붙는다</h2>
+                    <p class="scope reveal" style="--d:0.08s">EUV·CoWoS·HBM, 흔한 표현 → 발표 문구</p>
+                    <div class="body center">
+                        <div class="compare reveal" style="--d:0.15s">
+                            <div class="head">흔한 표현</div><div></div><div class="head after">발표 문구</div>
+                            <div class="cell before">“ASML 독점”</div><div class="cell to">→</div><div class="cell after"><span class="hl">상용</span> EUV 장비는 ASML만 만든다</div>
+                            <div class="cell before">“CoWoS 독점”</div><div class="cell to">→</div><div class="cell after">AI 가속기용 2.5D 패키징의<br><span class="hl">대부분</span>을 TSMC가 맡는다<small>ASE·Amkor·Intel·삼성도 같은 기능 제공</small></div>
+                            <div class="cell before">“HBM은 3사만”</div><div class="cell to">→</div><div class="cell after"><span class="hl">대량</span> 공급사가 3사다</div>
+                        </div>
+                        <p class="compare-note reveal" style="--d:0.3s">CoWoS 수요 대비 부족률은 2026년 말까지 20% → 10%로 줄어들 전망 [보도]</p>
+                    </div>
+                    <footer class="foot"><span>출처: TrendForce CoWoS 수급 전망(2026-06-15, 보도), research 1.3</span><span class="page"></span></footer>
+                </div>
+                <aside class="notes"><p>"ASML 독점" 대신 "상용 EUV 장비는 ASML만", "CoWoS 독점" 대신 "AI 가속기용 2.5D 패키징의 대부분을 TSMC가", "HBM 3사만" 대신 "대량 공급사는 3사".</p><p>CoWoS 캐파는 출처마다 정의가 달라요(TrendForce 월 12만~14만 장은 TSMC 단독).</p></aside>
+            </section>
+
+            <!-- 11 · h2h -->
+            <section class="slide" data-layout="h2h" data-mode="data" aria-label="한국의 위치">
+                <div class="frame">
+                    <h2 class="title reveal">한국 두 회사는 HBM·D램에서 강하고,<br>삼성 파운드리 점유율은 한 자릿수다</h2>
+                    <p class="scope reveal" style="--d:0.08s">2Q26 매출 점유율, 회사별. 메모리 이익률의 진폭은 21장에서 본다</p>
+                    <div class="body center">
+                        <div class="h2h h2h-4 reveal" style="--d:0.15s; --min:0; --span:80">
+                            <div></div>
+                            <div class="head">SK하이닉스</div>
+                            <div class="head">삼성전자</div>
+                            <div class="head">Micron</div>
+                            <div class="head">TSMC</div>
+
+                            <div class="metric">HBM</div>
+                            <div class="cell"><div class="big hl num">50%</div><div class="dtrack"><div class="pos grow hl" style="--v:50"></div></div></div>
+                            <div class="cell"><div class="big hl num">33%</div><div class="dtrack"><div class="pos grow hl" style="--v:33"></div></div></div>
+                            <div class="cell"><div class="big num">18%</div><div class="dtrack"><div class="pos grow" style="--v:18"></div></div></div>
+                            <div class="cell"><div class="none">해당 없음</div></div>
+
+                            <div class="metric gap">D램</div>
+                            <div class="cell gap"><div class="big num">25~26%</div></div>
+                            <div class="cell gap"><div class="big num">38~39%</div></div>
+                            <div class="cell gap"><div class="none">원문 미확인</div></div>
+                            <div class="cell gap"><div class="none">해당 없음</div></div>
+
+                            <div class="metric gap">파운드리</div>
+                            <div class="cell gap"><div class="none">자료 없음</div></div>
+                            <div class="cell gap"><div class="big num">5.9%</div><div class="dtrack"><div class="pos grow" style="--v:5.9"></div></div></div>
+                            <div class="cell gap"><div class="none">해당 없음</div></div>
+                            <div class="cell gap"><div class="big num">72.5%</div><div class="dtrack"><div class="pos grow" style="--v:72.5"></div></div></div>
+                        </div>
+                    </div>
+                    <footer class="foot"><span>출처: Counterpoint HBM·D램 점유율(매출 기준, D램은 초판·개정판 범위), TrendForce 파운드리 상위 10사 매출 기준, 2Q26</span><span class="page"></span></footer>
+                </div>
+                <aside class="notes"><p>회사별로 봅니다. HBM은 SK하이닉스 50%, 삼성전자 33%, Micron 18%. D램은 삼성 38~39%, SK 25~26%. 파운드리는 TSMC 72.5% 대 삼성 5.9%.</p><p>한국 두 회사가 강한 곳은 메모리 쪽이에요. 메모리가 사이클을 얼마나 크게 타는지는 21장에서 숫자로 봅니다. Micron D램 점유율은 판본 차이로 원문을 확인하지 못해 비웠습니다. SK하이닉스 파운드리 칸은 자료가 없어 비웠어요. 그래서 파운드리 얘기는 삼성만입니다.</p></aside>
+            </section>
+
+            <!-- 12 · dual -->
+            <section class="slide" data-layout="dual" data-mode="data" aria-label="단계별 이익률">
+                <div class="frame">
+                    <h2 class="title reveal">회사별 최신 FY 기준, 메모리 영업이익률은 팹리스급이다</h2>
+                    <p class="scope reveal" style="--d:0.08s">단계별 중앙값, 회사마다 최신 FY(2025~2026, 결산월 다름), 단계당 n=1~3. 대상 회사는 노트</p>
+                    <div class="body">
+                        <div class="dual reveal" style="--d:0.15s; --max:55">
+                            <div></div>
+                            <div class="colhead">영업이익률<small>%</small></div>
+                            <div class="colhead">CapEx/매출<small>%</small></div>
+
+                            <div class="rowlabel">팹리스</div>
+                            <div class="track"><div class="bar grow" style="--v:50.1354"></div><span class="val num">50.1</span></div>
+                            <div class="track"><div class="bar grow" style="--v:1.8866"></div><span class="val num">1.9</span></div>
+
+                            <div class="rowlabel">메모리</div>
+                            <div class="track"><div class="bar grow hl" style="--v:48.5928"></div><span class="val hl num">48.6</span></div>
+                            <div class="track"><div class="bar grow" style="--v:23.0591"></div><span class="val num">23.1</span></div>
+
+                            <div class="rowlabel">장비</div>
+                            <div class="track"><div class="bar grow" style="--v:29.2195"></div><span class="val num">29.2</span></div>
+                            <div class="track"><div class="bar grow" style="--v:4.9934"></div><span class="val num">5.0</span></div>
+
+                            <div class="rowlabel">후공정</div>
+                            <div class="track"><div class="bar grow" style="--v:25.28"></div><span class="val num">25.3</span></div>
+                            <div class="track"><div class="bar grow" style="--v:14.8699"></div><span class="val num">14.9</span></div>
+
+                            <div class="rowlabel">파운드리</div>
+                            <div class="track"><div class="bar grow" style="--v:23.3199"></div><span class="val num">23.3</span></div>
+                            <div class="track"><div class="bar grow" style="--v:30.6916"></div><span class="val num">30.7</span></div>
+
+                            <div class="rowlabel">소재</div>
+                            <div class="track"><div class="bar grow" style="--v:14.4731"></div><span class="val num">14.5</span></div>
+                            <div class="track"><div class="bar grow" style="--v:13.0004"></div><span class="val num">13.0</span></div>
+
+                            <div class="rowlabel">설계도구·IP</div>
+                            <div class="track"><div class="bar grow" style="--v:12.97"></div><span class="val num">13.0</span></div>
+                            <div class="track"><div class="bar grow" style="--v:2.4022"></div><span class="val num">2.4</span></div>
+                        </div>
+                        <p class="dual-note reveal" style="--d:0.3s">메모리 중앙값은 Micron FY2026(9월 결산)과 한국 2사 FY2025(12월 결산)가 섞인 값이다.</p>
+                    </div>
+                    <footer class="foot"><span>출처: financial-analysis 산출물(SEC EDGAR·yfinance), 최신 FY(2025~2026)</span><span class="page"></span></footer>
+                </div>
+                <aside class="notes"><p>지금 메모리 이익률 48.6%, 팹리스 50.1%. 메모리가 설계 회사급으로 번다는 게 이번 사이클의 특이점. 단 메모리 값은 결산월이 섞여 있어요.</p><p>오른쪽 열: 메모리는 그만큼 자본도 많이 묶는다(9장과 연결).</p><p>단계별 대상: 설계도구·IP SNPS(n=1), 팹리스 NVDA·AVGO, 장비 ASML·AMAT·원익IPS, 소재 솔브레인(n=1), 메모리 SK하이닉스·삼성전자·MU, 파운드리 TSMC·Intel, 후공정 Amkor·한미반도체. 결산 시점은 회사마다 최신 FY(2025~2026)라 몇 달씩 어긋납니다.</p></aside>
+            </section>
+
+            <!-- 13 · panels -->
+            <section class="slide" data-layout="panels" data-mode="concept" aria-label="주제 검증">
+                <div class="frame">
+                    <h2 class="title reveal">메모리 회사의 높은 이익률은 확인되지만,<br>HBM만 떼어 본 재무는 없다</h2>
+                    <p class="scope reveal" style="--d:0.08s">12장 표 기준: 단계별 영업이익률 중앙값, 최신 FY. 병목의 기여는 별도 검증 과제</p>
+                    <div class="body center">
+                        <div class="panels">
+                            <div class="pane support reveal" style="--d:0.15s">
+                                <h3>12장 표에서 보이는 것</h3>
+                                <p>메모리 회사 48.6%는 팹리스 50.1%와 비슷하다.</p>
+                            </div>
+                            <div class="pane limit reveal" style="--d:0.3s">
+                                <h3>12장 표로는 모르는 것</h3>
+                                <p>메모리 회사 숫자에는 범용 <span class="kn-nowrap">D램·낸드가</span> 섞였다. 장비 29.2%, 파운드리 <span class="kn-nowrap">23.3%(회사 전체)로</span> CoWoS도 떼어 볼 수 없다.</p>
+                            </div>
+                        </div>
+                    </div>
+                    <footer class="foot"><span>출처: financial-analysis 산출물, SK하이닉스 분기 재무(yfinance), 2026-10-15 수집</span><span class="page"></span></footer>
+                </div>
+                <aside class="notes"><p>12장 표에서는 메모리 회사의 이익률이 팹리스급이라는 것까지 보여요. 하지만 메모리 회사 숫자는 범용 D램·낸드까지 섞인 전사 값이라, HBM만의 이익은 따로 떼어 볼 수 없습니다.</p><p>장비 29.2%는 팹리스보다 낮고, 파운드리는 회사 전체 숫자라 CoWoS만의 이익도 아닙니다. 병목이 이익을 가져갔는지는 별도 검증 과제로 남깁니다.</p></aside>
+            </section>
+
+            <!-- 14 · flowbar -->
+            <section class="slide" data-layout="flowbar" data-mode="concept" aria-label="메모리 사이클">
+                <div class="frame">
+                    <h2 class="title reveal">SK하이닉스 2023: 매출이 −26.6% 줄자<br>영업이익률은 15.3%에서 −23.6%로 떨어졌다</h2>
+                    <p class="scope reveal" style="--d:0.08s">연결 기준 연간, FY2022-2023. 위 흐름은 원리 설명(수치 없음)</p>
+                    <div class="body center">
+                        <div class="flow reveal" style="--d:0.15s">
+                            <div class="step">가격 하락</div><div class="to">→</div>
+                            <div class="step">매출 감소</div><div class="to">→</div>
+                            <div class="step">고정비는 그대로<small>공장 감가상각</small></div><div class="to">→</div>
+                            <div class="step hl">영업이익 급감</div>
+                        </div>
+                        <div class="flowbar-pair reveal" style="--d:0.3s">
+                            <div>
+                                <h3>매출 변화율<small>YoY</small></h3>
+                                <div class="flowbar-rows" style="--min:-30; --span:50">
+                                    <div class="flowbar-row"><span>2023 매출</span><div class="dtrack"><div class="neg grow from-right" style="--v:26.5698"></div><span class="val num at-neg" style="--v:26.5698">−26.6%</span></div></div>
+                                </div>
+                            </div>
+                            <div>
+                                <h3>영업이익률 수준<small>%</small></h3>
+                                <div class="flowbar-rows" style="--min:-30; --span:50">
+                                    <div class="flowbar-row"><span>2022</span><div class="dtrack"><div class="pos grow" style="--v:15.2604"></div><span class="val num at-pos" style="--v:15.2604">15.3%</span></div></div>
+                                    <div class="flowbar-row"><span>2023</span><div class="dtrack"><div class="neg grow from-right hl" style="--v:23.5927"></div><span class="val hl num at-neg" style="--v:23.5927">−23.6%</span></div></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <footer class="foot"><span>출처: financial-analysis 산출물, SK하이닉스 연결 FY2022-2023</span><span class="page"></span></footer>
+                </div>
+                <aside class="notes"><p>메모리는 공장 감가상각이 원가의 큰 몫이라, 가격이 빠지면 이익이 크게 무너져요. SK 2023년 매출 −26.6%에 영업이익률은 15.3%에서 −23.6%로.</p><p>왼쪽은 변화율, 오른쪽은 수준이라 따로 그렸고, 두 차트는 같은 척도(−30~+20)와 같은 0선 위치입니다. 순서(시차)는 연간 숫자로는 보여 줄 수 없어서 크기만 말합니다.</p></aside>
+            </section>
+
+            <!-- 15 · checklist -->
+            <section class="slide" data-layout="checklist" data-mode="concept" aria-label="HBM이 바꾼 점">
+                <div class="frame">
+                    <h2 class="title reveal">HBM은 메모리를 연간 계약·반(半)주문형 제품으로<br>바꾸고 있다 (회사 주장 포함)</h2>
+                    <div class="body center">
+                        <ol class="checks">
+                            <li class="reveal" style="--d:0.12s"><span class="n ord">1</span><span class="q">물량과 가격을 연간 계약으로 정한다<span class="cite">회사 주장</span></span></li>
+                            <li class="reveal" style="--d:0.2s"><span class="n ord">2</span><span class="q">HBM4부터 베이스 다이를 고객 요구에 맞춰 만든다<span class="cite">16장 참고</span></span></li>
+                            <li class="reveal" style="--d:0.28s"><span class="n ord">3</span><span class="q">그래서 가격 변동이 범용 D램보다 작을 수 있다<span class="cite">추론 · 31장 질문 1</span></span></li>
+                        </ol>
+                        <p class="checks-foot reveal" style="--d:0.4s">반론: 장기계약은 하방을 막지만 <b>상방도 막는다</b>.</p>
+                    </div>
+                    <footer class="foot"><span>출처: research 2장(회사 발표·보도), TrendForce(2026-01-28, 보도)</span><span class="page"></span></footer>
+                </div>
+                <aside class="notes"><p>핵심은 파는 방식이에요. 연간 계약, 그리고 HBM4부터는 베이스 다이를 고객 요구에 맞춰 만드는 반주문형. 둘 다 회사 주장이 섞여 있습니다.</p><p>배경으로 HBM이 바꾼 것들: GPU 대역폭 병목(HBM4 통로 2,048bit), 대량 공급사가 3사뿐, HBM이 생산능력을 가져가 범용 D램 가격까지 끌어올림.</p><p>반론: 장기계약은 하방도 막지만 상방도 막는다.</p><p>3번은 계약 구조에서 나온 추론이고, 숫자로 검증된 건 아니에요. 31장 첫 질문으로 다시 묻습니다.</p></aside>
+            </section>
+
+            <!-- 16 · chain -->
+            <section class="slide" data-layout="chain" data-mode="concept" aria-label="SK하이닉스와 TSMC">
+                <div class="frame">
+                    <h2 class="title reveal">HBM4부터 TSMC는 SK하이닉스의 공급자이자<br>조립 파트너다</h2>
+                    <p class="scope reveal" style="--d:0.08s">베이스 다이 공급 + CoWoS 결합, NVIDIA 배분은 보도 엇갈림</p>
+                    <div class="body center">
+                        <ol class="chain" style="--n:4">
+                            <li class="stage reveal" style="--d:0.15s"><div class="name">베이스 다이</div><div class="sub">HBM 맨 아래 로직 다이</div><ul class="who"><li>TSMC</li></ul><span class="hop" aria-hidden="true">›</span></li>
+                            <li class="stage reveal" style="--d:0.25s"><div class="name">HBM 적층</div><div class="sub">D램 코어 다이를 쌓는다</div><ul class="who"><li class="chip">SK하이닉스</li></ul><span class="hop" aria-hidden="true">›</span></li>
+                            <li class="stage reveal" style="--d:0.35s"><div class="name">CoWoS 결합</div><div class="sub">GPU 옆에 HBM을 붙인다</div><ul class="who"><li>TSMC</li></ul><span class="hop" aria-hidden="true">›</span></li>
+                            <li class="stage reveal" style="--d:0.45s"><div class="name">가속기</div><div class="sub">완성품</div><ul class="who"><li>NVIDIA</li></ul></li>
+                        </ol>
+                        <div class="legend chain-legend reveal" style="--d:0.55s"><span class="key"><span class="sw chip"></span>한국 기업</span></div>
+                        <p class="chain-note reveal" style="--d:0.6s">NVIDIA HBM4 배분: <b>SK 약 2/3</b>(TrendForce) 대 <b>삼성 주도</b>(한국경제), 보도가 엇갈린다 [보도]</p>
+                    </div>
+                    <footer class="foot"><span>출처: TrendForce(2026-01-28, 연합뉴스 인용·익명 소식통), 한국경제 보도</span><span class="page"></span></footer>
+                </div>
+                <aside class="notes"><p>HBM4부터 SK는 TSMC에서 베이스 다이를 받고, 완성된 HBM은 TSMC CoWoS에서 GPU와 붙어요. NVIDIA 배분은 "SK 약 2/3"와 "삼성 주도" 보도가 엇갈립니다.</p></aside>
+            </section>
+
+            <!-- 17 · steps -->
+            <section class="slide" data-layout="steps" data-mode="data" aria-label="HBM 첫 개발">
+                <div class="frame">
+                    <h2 class="title reveal">SK하이닉스는 2013년 AMD와 함께 HBM을 처음 개발했다</h2>
+                    <p class="scope reveal" style="--d:0.08s">회사 연혁: 1983 현대전자 → 2012 SK 편입 → 2026-07-10 나스닥 ADR, 최대주주 SK스퀘어 20.5%</p>
+                    <div class="body center">
+                        <div class="steps-years">
+                            <div class="steps-years-row reveal" style="--d:0.15s">
+                                <div class="yr hl">2013</div>
+                                <div><div class="what">AMD와 공동 개발</div><p class="why">D램을 TSV로 쌓은 1세대 HBM</p></div>
+                            </div>
+                            <div class="steps-years-row reveal" style="--d:0.3s">
+                                <div class="yr">2013-10</div>
+                                <div><div class="what">JEDEC 표준</div><p class="why">업계 표준 규격이 된다</p></div>
+                            </div>
+                            <div class="steps-years-row reveal" style="--d:0.45s">
+                                <div class="yr">2015</div>
+                                <div><div class="what">첫 제품</div><p class="why">AMD Fiji GPU에 실렸다. 그래서 <span class="kn-nowrap">“세계 최초 HBM”</span>이 아니라 “AMD와 함께 처음 개발” [보도]</p></div>
+                            </div>
+                        </div>
+                    </div>
+                    <footer class="foot"><span>출처: 매일경제(보도, JEDEC JESD235 인용), 아이뉴스24(보도), SK하이닉스 뉴스룸(2026-07-10), 딜사이트(2026-07)</span><span class="page"></span></footer>
+                </div>
+                <aside class="notes"><p>"세계 최초 HBM"이 아니라 "AMD와 함께 처음 개발". 2013년 개발, 같은 해 10월 JEDEC 표준, 시장 첫 제품은 2015년 AMD Fiji.</p><p>연혁은 캡션으로만: 1983 현대전자 → 2012 SK → 2026년 7월 나스닥 ADR. SK스퀘어가 20.5%.</p></aside>
+            </section>
+
+            <!-- 18 · h2h -->
+            <section class="slide" data-layout="h2h" data-mode="data" aria-label="HBM 점유율 변화">
+                <div class="frame">
+                    <h2 class="title reveal">SK하이닉스 HBM 점유율은<br>1년 새 64%에서 50%로 내려왔다</h2>
+                    <p class="scope reveal" style="--d:0.08s">Counterpoint 매출 기준, 2Q25 → 2Q26</p>
+                    <div class="body center">
+                        <div class="h2h reveal" style="--d:0.15s; --min:0; --span:70">
+                            <div></div>
+                            <div class="head">2Q25</div>
+                            <div class="head">2Q26</div>
+
+                            <div class="metric">SK하이닉스<br>HBM 점유율</div>
+                            <div class="cell"><div class="big num">64%</div><div class="dtrack"><div class="pos grow" style="--v:64"></div></div></div>
+                            <div class="cell"><div class="big hl num">50%</div><div class="dtrack"><div class="pos grow hl" style="--v:50"></div></div></div>
+                        </div>
+                        <p class="h2h-note reveal" style="--d:0.3s">분기 흐름: 64% → 57% → 58% → 50% (2Q25 → 4Q25 → 1Q26 → 2Q26).<br>2Q26 삼성전자 <b>33%</b>, Micron 18%. 여전히 1위이고, 원인은 단정하지 않는다.</p>
+                    </div>
+                    <footer class="foot"><span>출처: Counterpoint, Global DRAM and HBM Market Share 2Q26(매출 기준)</span><span class="page"></span></footer>
+                </div>
+                <aside class="notes"><p>여전히 1위지만 64%에서 50%로. 삼성은 33%까지 올라왔어요. 원인은 단정하지 않습니다. 점유율 변화일 뿐이에요.</p></aside>
+            </section>
+
+            <!-- 19 · quotes -->
+            <section class="slide" data-layout="quotes" data-mode="concept" aria-label="정확한 위치">
+                <div class="frame">
+                    <h2 class="title reveal">“D램 1위”가 아니라 “HBM 1위·D램 2위”다</h2>
+                    <p class="scope reveal" style="--d:0.08s">2Q26 매출 점유율, Counterpoint</p>
+                    <div class="body center">
+                        <div class="quotes">
+                            <p class="quotes-label reveal" style="--d:0.1s">흔한 오해</p>
+                            <ul>
+                                <li class="reveal" style="--d:0.15s">“D램 1위”</li>
+                                <li class="reveal" style="--d:0.25s">“HBM 64%”</li>
+                            </ul>
+                            <div class="reveal" style="--d:0.4s"><p class="verdict ink"><span class="kn-answer">정확히는 <span class="hl">HBM 1위·D램 2위</span>.</span><br>HBM 50%, D램 25~26%.<br>D램 1위는 삼성전자(38~39%)다</p><p class="verdict-sub">D램 점유율은 Counterpoint 초판과<br>개정판이 달라 범위로 적었다.</p></div>
+                        </div>
+                    </div>
+                    <footer class="foot"><span>출처: Counterpoint 2Q26(8/4 초판과 9/2 개정 차이로 범위 표기)</span><span class="page"></span></footer>
+                </div>
+                <aside class="notes"><p>"D램 1위"라고 하면 틀려요. D램은 삼성이 1위(38~39%), SK는 2위(25~26%). HBM도 64%는 1년 전 숫자고 지금은 50%예요. 정확히는 "HBM 1위·D램 2위". 메모리 전체 순위는 이 자료에 없어요.</p></aside>
+            </section>
+
+            <!-- 20 · panels -->
+            <section class="slide" data-layout="panels" data-mode="concept" aria-label="양산의 뜻">
+                <div class="frame">
+                    <h2 class="title reveal">SK하이닉스의 HBM4 ‘양산’은 체제 구축을 뜻한다</h2>
+                    <div class="body center">
+                        <div class="panels">
+                            <div class="pane support reveal" style="--d:0.15s">
+                                <h3>회사 발표</h3>
+                                <p>HBM4 개발 완료와 양산 체제 구축. 동작 속도 10Gbps 이상.</p>
+                                <p class="src">SK하이닉스 뉴스룸, 2025-09-12</p>
+                            </div>
+                            <div class="pane limit reveal" style="--d:0.3s">
+                                <h3>읽을 때 주의</h3>
+                                <p>체제 구축은 첫 출하·본격 증산과 다른 단계다. 회사는 10Gbps 이상을 JEDEC 표준 동작 속도 8Gbps와 비교했다(표준의 8Gbps는 핀당 속도).</p>
+                            </div>
+                        </div>
+                    </div>
+                    <footer class="foot"><span>출처: SK하이닉스 뉴스룸(2025-09-12), JEDEC JESD270-4</span><span class="page"></span></footer>
+                </div>
+                <aside class="notes"><p>SK가 말한 "양산"은 양산 체제 구축이에요. 첫 출하, 본격 증산과는 다른 단계입니다. "10Gbps 이상"은 회사가 HBM4의 JEDEC 표준 동작 속도 8Gbps와 비교한 숫자예요. 원문에 "핀당"이라는 말은 없지만, 표준의 8Gbps가 핀당 속도라서 같은 기준으로 읽힙니다.</p><p>참고로 HBM4E 12단 샘플 공급은 2026-06-18 발표, 양산 시점은 적혀 있지 않습니다.</p></aside>
+            </section>
+
+            <!-- 21 · range -->
+            <section class="slide" data-layout="range" data-mode="data" aria-label="영업이익률 진폭">
+                <div class="frame">
+                    <h2 class="title reveal">SK하이닉스 영업이익률: 연간 최저 −23.6%(2023),<br>분기 최고 76.3%(2Q26)</h2>
+                    <div class="legend reveal" style="margin-top:24px; --d:0.08s">
+                        <span>영업이익률 최저-최고(%), 연간 2022-2025 + 분기 2Q25-2Q26, 수집 이력 4개년</span>
+                        <span class="key"><span class="sw accent"></span>SK하이닉스</span>
+                        <span class="key"><span class="sw bar"></span>비교</span>
+                    </div>
+                    <div class="body center">
+                        <div class="range-wrap reveal" style="--d:0.15s; --min:-50; --span:140">
+                            <div class="axis-layer" aria-hidden="true">
+                                <div class="zero"></div>
+                                <span class="tick num" data-nocheck style="--t:-40">−40</span>
+                                <span class="tick num" data-nocheck style="--t:-20">−20</span>
+                                <span class="tick num" data-nocheck style="--t:0">0</span>
+                                <span class="tick num" data-nocheck style="--t:20">20</span>
+                                <span class="tick num" data-nocheck style="--t:40">40</span>
+                                <span class="tick num" data-nocheck style="--t:60">60</span>
+                                <span class="tick num" data-nocheck style="--t:80">80</span>
+                            </div>
+                            <div class="range">
+                                <div class="who"><b>SK하이닉스 연간</b><span>4년, 2022-2025</span></div>
+                                <div class="rtrack" style="--lo:-23.5927; --hi:48.5928"><span class="lo num">−23.6</span><div class="span grow hl"></div><span class="hi num">48.6</span></div>
+                                <div class="who"><b>SK하이닉스 분기</b><span>2Q25-2Q26</span></div>
+                                <div class="rtrack" style="--lo:41.4397; --hi:76.3282"><span class="lo num">41.4</span><div class="span grow hl"></div><span class="hi num">76.3</span></div>
+                                <div class="who"><b>Micron 연간</b><span>10년, FY2017-2026</span></div>
+                                <div class="rtrack" style="--lo:-36.9691; --hi:74.5863"><span class="lo num">−37.0</span><div class="span grow"></div><span class="hi num">74.6</span></div>
+                            </div>
+                        </div>
+                        <p class="caveat reveal" style="--d:0.4s">반례: 삼성전자는 2023년에도 영업이익률 2.5%로 흑자(전사 기준). 같은 시기 Micron 분기(FQ3) 80.4%라 SK가 세계 최고 이익률도 아니다.</p>
+                    </div>
+                    <footer class="foot"><span>출처: financial-analysis 산출물(연간), 메모리 3사 분기 재무(yfinance), 2026-10-15 수집</span><span class="page"></span></footer>
+                </div>
+                <aside class="notes"><p>3년 사이 −23.6%에서 76.3%까지. 반례: 삼성은 2023년에도 연간 흑자(2.5%, 전사). 같은 시기 MU 분기 80.4%라 SK가 세계 1위 이익률도 아닙니다.</p></aside>
+            </section>
+
+            <!-- 22 · bignum -->
+            <section class="slide" data-layout="bignum" data-mode="data" aria-label="분기 매출 성장">
+                <div class="frame">
+                    <h2 class="title reveal">2Q26 분기 매출은 1년 전보다 256.8% 늘었다</h2>
+                    <p class="scope reveal" style="--d:0.08s">SK하이닉스 연결, 2Q25 → 2Q26</p>
+                    <div class="body center">
+                        <div class="bignum">
+                            <div class="reveal" style="--d:0.15s">
+                                <div class="n num">256.8<small>%</small></div>
+                                <p class="cap">SK하이닉스 2Q26 분기 매출 YoY(2Q25 대비)</p>
+                            </div>
+                            <ul class="read reveal" style="--d:0.3s">
+                                <li>분기 매출 <b>22.2조 → 79.3조</b></li>
+                                <li>분기 영업이익 <b>60.5조</b>, 최근 4개 분기 합 <b>128.7조</b></li>
+                                <li>다섯 분기 모두 매출이 늘던 구간이라 <span class="kn-nowrap">이 속도의</span> <b>지속성은 검증되지 않았다</b></li>
+                            </ul>
+                        </div>
+                    </div>
+                    <footer class="foot"><span>출처: 메모리 3사 분기 재무(yfinance, fetch_quarterly), 2026-10-15 수집</span><span class="page"></span></footer>
+                </div>
+                <aside class="notes"><p>1년 만에 분기 매출 22.2조에서 79.3조. 다만 우리가 본 다섯 분기는 모두 매출이 늘던 구간이라, 이 속도가 꺾일 때 어떻게 되는지는 아직 본 적이 없어요. 정점인지 아닌지는 마지막 장에서 같이 묻겠습니다.</p></aside>
+            </section>
+
+            <!-- 23 · h2h -->
+            <section class="slide" data-layout="h2h" data-mode="data" aria-label="일회성 이익">
+                <div class="frame">
+                    <h2 class="title reveal">2Q26 순이익이 영업이익보다 큰 것은 일회성<br>영업외이익 때문이라는 보도가 있다</h2>
+                    <p class="scope reveal" style="--d:0.08s">SK하이닉스 2Q26, 영업이익 대 순이익</p>
+                    <div class="body center">
+                        <div class="h2h reveal" style="--d:0.15s; --min:0; --span:100">
+                            <div></div>
+                            <div class="head">영업이익</div>
+                            <div class="head">순이익</div>
+
+                            <div class="metric">2Q26</div>
+                            <div class="cell"><div class="big num">60.5조</div><div class="dtrack"><div class="pos grow" style="--v:60.5"></div></div></div>
+                            <div class="cell"><div class="big hl num">93.8조</div><div class="dtrack"><div class="pos grow hl" style="--v:93.8"></div></div></div>
+                        </div>
+                        <p class="h2h-note reveal" style="--d:0.3s">순이익에는 Kioxia 지분 매각 등 투자자산 처분·평가이익 <b>약 63조원</b>이 섞였다는 보도가 있다.<br>회사 원문은 아직 확인하지 못했다.</p>
+                    </div>
+                    <footer class="foot"><span>출처: 메모리 3사 분기 재무(yfinance), Korea JoongAng Daily(2026-07-29, Reuters 인용 보도)</span><span class="page"></span></footer>
+                </div>
+                <aside class="notes"><p>순이익 93.8조가 영업이익 60.5조보다 커요. Kioxia 지분 매각 같은 일회성 이익이 섞였다는 보도. 회사 원문은 아직 못 열었습니다.</p></aside>
+            </section>
+
+            <!-- 24 · dual -->
+            <section class="slide" data-layout="dual" data-mode="data" aria-label="P/E 기준">
+                <div class="frame">
+                    <h2 class="title reveal">SK하이닉스 P/E는 무엇으로<br>나누느냐에 따라 2.4배~21.0배다</h2>
+                    <p class="scope reveal" style="--d:0.08s">2026-10-15 시총 기준, TTM·run-rate는 일회성 이익 포함</p>
+                    <div class="body center">
+                        <div class="dual dual-3 reveal" style="--d:0.15s; --max:32">
+                            <div></div>
+                            <div class="colhead">SK하이닉스<small>배</small></div>
+                            <div class="colhead">삼성전자<small>배</small></div>
+                            <div class="colhead">Micron<small>배</small></div>
+
+                            <div class="rowlabel stack">최신 FY<small>연간 순이익(MU는 FY2026)</small></div>
+                            <div class="track"><div class="bar grow hl" style="--v:20.9582"></div><span class="val hl num">21.0</span></div>
+                            <div class="track"><div class="bar grow" style="--v:30.8964"></div><span class="val num">30.9</span></div>
+                            <div class="track"><div class="bar grow" style="--v:12.1723"></div><span class="val num">12.2</span></div>
+
+                            <div class="rowlabel stack">TTM<small>최근 4개 분기 순이익 합</small></div>
+                            <div class="track"><div class="bar grow hl" style="--v:5.5537"></div><span class="val hl num">5.6</span></div>
+                            <div class="track"><div class="bar grow" style="--v:9.1368"></div><span class="val num">9.1</span></div>
+                            <div class="track"><div class="bar grow" style="--v:12.1723"></div><span class="val num">12.2</span></div>
+
+                            <div class="rowlabel stack">run-rate<small>최근 분기 순이익 × 4</small></div>
+                            <div class="track"><div class="bar grow hl" style="--v:2.3969"></div><span class="val hl num">2.4</span></div>
+                            <div class="track"><div class="bar grow" style="--v:4.7969"></div><span class="val num">4.8</span></div>
+                            <div class="track"><div class="bar grow" style="--v:6.8584"></div><span class="val num">6.9</span></div>
+
+                            <div class="rowlabel stack">Forward<small>컨센서스 예상 이익</small></div>
+                            <div class="track"><div class="bar grow hl" style="--v:2.6896"></div><span class="val hl num">2.7</span></div>
+                            <div class="track"><div class="bar grow" style="--v:2.9094"></div><span class="val num">2.9</span></div>
+                            <div class="track"><div class="bar grow" style="--v:4.4304"></div><span class="val num">4.4</span></div>
+                        </div>
+                        <p class="dual-note reveal" style="--d:0.3s">TTM·run-rate: 한국 2사는 2Q26 일회성 영업외이익 포함이라 실제보다 낮게 나왔을 수 있다. Forward: 이익 지속 가정이 붙은 컨센서스 값.</p>
+                    </div>
+                    <footer class="foot"><span>출처: financial-analysis 산출물(yfinance 스냅샷), 2026-10-15</span><span class="page"></span></footer>
+                </div>
+                <aside class="notes"><p>같은 회사가 2.4배도 되고 21배도 돼요. 낮은 두 숫자엔 일회성 이익이 들어 있고, Forward 2.7배엔 "이익이 계속된다"는 가정이 붙어요.</p></aside>
+            </section>
+
+            <!-- 25 · compare -->
+            <section class="slide" data-layout="compare" data-mode="concept" aria-label="MU 저PER 함정">
+                <div class="frame">
+                    <h2 class="title reveal">MU에서는 이익 정점의 저PER이 함정이었다</h2>
+                    <p class="scope reveal" style="--d:0.08s">MU 1종목, 사이클 2회: 법칙이 아니라 사례</p>
+                    <div class="body center">
+                        <div class="compare compare-wide reveal" style="--d:0.15s">
+                            <div class="head">PER만 보면</div><div></div><div class="head after">다음 해 MU에서는</div>
+                            <div class="cell before">FY2018 PER 4.1배,<br>싸 보였다<small>영업이익률 49.3%. PER은 결산월(2018-08) 근사</small></div><div class="cell to">→</div><div class="cell after">영업이익 −50.8%,<br>주가 −13.8%<small>FY2019, 주가는 결산월 종가 2018-08 → 2019-08</small></div>
+                            <div class="cell before">FY2024 PER 139.1배,<br>비싸 보였다<small>영업이익률 5.2%. PER은 결산월(2024-08) 근사</small></div><div class="cell to">→</div><div class="cell after">주가 +24.2%<small>FY2025, 결산월 종가 2024-08 → 2025-08</small></div>
+                        </div>
+                        <p class="compare-note reveal" style="--d:0.3s">PER은 결산월 근사값(현재 주식 수를 과거에 적용). 한국 2사는 이력이 4년이라 같은 검증을 하지 못했다.</p>
+                    </div>
+                    <footer class="foot"><span>출처: financial-analysis 산출물(SEC EDGAR·yfinance), Micron FY2017-2026</span><span class="page"></span></footer>
+                </div>
+                <aside class="notes"><p>MU 사례 하나지만 교훈은 분명해요. 정점의 PER 4.1배 다음 해 영업이익 −50.8%, 바닥의 139.1배 다음 해 주가 +24.2%. 법칙이 아니라 MU에서 그랬다.</p></aside>
+            </section>
+
+            <!-- 26 · dual -->
+            <section class="slide" data-layout="dual" data-mode="data" aria-label="증설 강도">
+                <div class="frame">
+                    <h2 class="title reveal">분기 CapEx/매출은 줄었어도, 연간 CapEx/감가상각은<br>수집 이력 최고다 (MU 10년, SK 4년)</h2>
+                    <p class="scope reveal" style="--d:0.08s">서로 다른 기간: 왼쪽 SK 분기(4Q25·2Q26), 가운데 MU 연간(FY2017~2026), 오른쪽 SK 연간(2022~2025). 반례 삼성(전사) 2025 1.1x</p>
+                    <div class="body center">
+                        <div class="dual-split dual-split-3 reveal" style="--d:0.15s">
+                            <div class="kn-col">
+                            <div class="dual dual-group dual-compact" style="--max:40">
+                                <div class="colhead">분기 · CapEx/매출<small>SK, %</small></div>
+                                <div class="rowlabel">4Q25</div>
+                                <div class="track"><div class="bar grow" style="--v:37.3043"></div><span class="val num">37.3</span></div>
+                                <div class="rowlabel">2Q26</div>
+                                <div class="track"><div class="bar grow" style="--v:14.0303"></div><span class="val num">14.0</span></div>
+                            </div>
+                            <p class="dual-note kn-side-note" style="--d:0.3s">분기 비율 하락은 매출 폭증의 분모 효과다. 증설이 몇 년 뒤 공급으로 나온다는 것은 일반론이다.</p>
+                            </div>
+                            <div class="dual dual-group dual-compact" style="--max:3.5">
+                                <div class="colhead">연간 · CapEx/감가상각<small>MU, 배</small></div>
+                                <div class="rowlabel">FY2017</div><div class="track"><div class="bar grow" style="--v:1.2261"></div><span class="val num">1.2x</span></div>
+                                <div class="rowlabel">FY2018</div><div class="track"><div class="bar grow" style="--v:1.8657"></div><span class="val num">1.9x</span></div>
+                                <div class="rowlabel">FY2019</div><div class="track"><div class="bar grow" style="--v:1.8031"></div><span class="val num">1.8x</span></div>
+                                <div class="rowlabel">FY2020</div><div class="track"><div class="bar grow" style="--v:1.4554"></div><span class="val num">1.5x</span></div>
+                                <div class="rowlabel">FY2021</div><div class="track"><div class="bar grow" style="--v:1.6141"></div><span class="val num">1.6x</span></div>
+                                <div class="rowlabel">FY2022</div><div class="track"><div class="bar grow" style="--v:1.6958"></div><span class="val num">1.7x</span></div>
+                                <div class="rowlabel">FY2023</div><div class="track"><div class="bar grow" style="--v:0.9897"></div><span class="val num">1.0x</span></div>
+                                <div class="rowlabel">FY2024</div><div class="track"><div class="bar grow" style="--v:1.0779"></div><span class="val num">1.1x</span></div>
+                                <div class="rowlabel">FY2025</div><div class="track"><div class="bar grow" style="--v:1.8986"></div><span class="val num">1.9x</span></div>
+                                <div class="rowlabel">FY2026</div><div class="track"><div class="bar grow hl" style="--v:3.2318"></div><span class="val hl num">3.2x</span></div>
+                            </div>
+                            <div class="dual dual-group dual-compact" style="--max:3.5">
+                                <div class="colhead">연간 · CapEx/감가상각<small>SK, 배</small></div>
+                                <div class="rowlabel">2022</div><div class="track"><div class="bar grow" style="--v:1.3955"></div><span class="val num">1.4x</span></div>
+                                <div class="rowlabel">2023</div><div class="track"><div class="bar grow" style="--v:0.6421"></div><span class="val num">0.6x</span></div>
+                                <div class="rowlabel">2024</div><div class="track"><div class="bar grow" style="--v:1.3244"></div><span class="val num">1.3x</span></div>
+                                <div class="rowlabel">2025</div><div class="track"><div class="bar grow hl" style="--v:2.0516"></div><span class="val hl num">2.1x</span></div>
+                            </div>
+                        </div>
+                    </div>
+                    <footer class="foot"><span>출처: financial-analysis 산출물(ratios capex_to_dep), 메모리 3사 분기 재무(yfinance), 2026-10-15 수집</span><span class="page"></span></footer>
+                </div>
+                <aside class="notes"><p>세 막대는 기간이 서로 달라요. 왼쪽은 SK 최근 분기, 나머지 둘은 회사별 연간 전체 이력입니다. 매출이 폭증해서 CapEx 비율은 작아 보여요. 감가상각 대비로 보면 MU 3.2x(10년 중 최고), SK 2.1x(4년 중 최고). 몇 년 뒤 공급으로 나올 수 있다는 건 일반론입니다.</p><p>반례: 삼성전자(전사)는 2025년 1.1x로 4년 중 최저.</p></aside>
+            </section>
+
+            <!-- 27 · sankey -->
+            <section class="slide" data-layout="sankey" data-mode="data" aria-label="돈의 흐름">
+                <div class="frame">
+                    <h2 class="title reveal">2025년 영업현금 53.4조원 중 <span class="kn-em">28.6조원</span>이<br>다시 설비투자로 나갔다</h2>
+                    <p class="scope reveal" style="--d:0.08s">FY2025 연결, 조원(반올림). 제품별 매출 → 손익 → 현금. 쓸 수 있는 현금 = 영업현금흐름 + 기타 유입(기초 현금 제외). 설비투자는 유형+무형 취득 총액</p>
+                    <div class="body center">
+                        <div class="reveal" style="--d:0.15s">
+<svg class="sankey" viewBox="0 0 1696 560" width="1696" height="560" role="img" aria-label="SK하이닉스 FY2025 돈의 흐름 Sankey">
+<path d="M16.0,31.6 C108.0,31.6 108.0,87.6 200.0,87.6 L200.0,384.3 C108.0,384.3 108.0,328.3 16.0,328.3 Z" style="fill:var(--color-bar);fill-opacity:0.22"/>
+<path d="M16.0,384.3 C108.0,384.3 108.0,384.3 200.0,384.3 L200.0,390.5 C108.0,390.5 108.0,390.5 16.0,390.5 Z" style="fill:var(--color-bar);fill-opacity:0.22"/>
+<path d="M16.0,446.5 C108.0,446.5 108.0,390.5 200.0,390.5 L200.0,472.4 C108.0,472.4 108.0,528.4 16.0,528.4 Z" style="fill:var(--color-bar);fill-opacity:0.22"/>
+<path d="M216.0,87.6 C328.0,87.6 328.0,85.2 440.0,85.2 L440.0,272.2 C328.0,272.2 328.0,274.6 216.0,274.6 Z" style="fill:var(--color-bar);fill-opacity:0.22"/>
+<path d="M216.0,274.6 C328.0,274.6 328.0,302.2 440.0,302.2 L440.0,454.5 C328.0,454.5 328.0,426.9 216.0,426.9 Z" style="fill:var(--color-bar);fill-opacity:0.22"/>
+<path d="M216.0,426.9 C328.0,426.9 328.0,484.5 440.0,484.5 L440.0,510.1 C328.0,510.1 328.0,452.5 216.0,452.5 Z" style="fill:var(--color-bar);fill-opacity:0.22"/>
+<path d="M216.0,452.5 C328.0,452.5 328.0,540.1 440.0,540.1 L440.0,560.0 C328.0,560.0 328.0,472.4 216.0,472.4 Z" style="fill:var(--color-bar);fill-opacity:0.22"/>
+<path d="M456.0,0.0 C628.0,0.0 628.0,139.4 800.0,139.4 L800.0,194.6 C628.0,194.6 628.0,55.2 456.0,55.2 Z" style="fill:var(--color-bar);fill-opacity:0.22"/>
+<path d="M456.0,85.2 C628.0,85.2 628.0,194.6 800.0,194.6 L800.0,381.6 C628.0,381.6 628.0,272.2 456.0,272.2 Z" style="fill:var(--color-bar);fill-opacity:0.22"/>
+<path d="M816.0,139.4 C963.0,139.4 963.0,139.4 1110.0,139.4 L1110.0,170.2 C963.0,170.2 963.0,170.2 816.0,170.2 Z" style="fill:var(--color-bar);fill-opacity:0.22"/>
+<path d="M816.0,170.2 C963.0,170.2 963.0,200.2 1110.0,200.2 L1110.0,411.6 C963.0,411.6 963.0,381.6 816.0,381.6 Z" style="fill:var(--color-bar);fill-opacity:0.22"/>
+<text class="sk-flow" x="963.0" y="299.9" text-anchor="middle">영업현금흐름 <tspan class="sk-v">53.4</tspan></text>
+<path d="M816.0,411.6 C963.0,411.6 963.0,411.6 1110.0,411.6 L1110.0,420.6 C963.0,420.6 963.0,420.6 816.0,420.6 Z" style="fill:var(--color-bar);fill-opacity:0.22"/>
+<path d="M1126.0,200.2 C1253.0,200.2 1253.0,200.2 1380.0,200.2 L1380.0,313.4 C1253.0,313.4 1253.0,313.4 1126.0,313.4 Z" style="fill:var(--color-accent);fill-opacity:0.38"/>
+<path d="M1126.0,313.4 C1253.0,313.4 1253.0,347.4 1380.0,347.4 L1380.0,418.0 C1253.0,418.0 1253.0,384.0 1126.0,384.0 Z" style="fill:var(--color-bar);fill-opacity:0.22"/>
+<path d="M1126.0,384.0 C1253.0,384.0 1253.0,452.0 1380.0,452.0 L1380.0,467.4 C1253.0,467.4 1253.0,399.4 1126.0,399.4 Z" style="fill:var(--color-bar);fill-opacity:0.22"/>
+<path d="M1126.0,399.4 C1253.0,399.4 1253.0,501.4 1380.0,501.4 L1380.0,508.0 C1253.0,508.0 1253.0,406.0 1126.0,406.0 Z" style="fill:var(--color-bar);fill-opacity:0.22"/>
+<path d="M1126.0,406.0 C1253.0,406.0 1253.0,542.0 1380.0,542.0 L1380.0,556.6 C1253.0,556.6 1253.0,420.6 1126.0,420.6 Z" style="fill:var(--color-bar);fill-opacity:0.22"/>
+<rect x="0" y="31.6" width="16" height="296.7" style="fill:var(--color-bar)"/>
+<text class="sk-l" x="28" y="188.9">D램 <tspan class="sk-v">74.9</tspan></text>
+<text class="sk-sub" x="28" y="222.9">매출의 77.1%</text>
+<rect x="0" y="384.3" width="16" height="6.1" style="fill:var(--color-bar)"/>
+<text class="sk-l" x="28" y="396.4">기타 제품 <tspan class="sk-v">1.6</tspan></text>
+<text class="sk-sub" x="28" y="430.4">매출의 1.6%</text>
+<rect x="0" y="446.5" width="16" height="82.0" style="fill:var(--color-bar)"/>
+<text class="sk-l" x="28" y="496.4">낸드 <tspan class="sk-v">20.7</tspan></text>
+<text class="sk-sub" x="28" y="556">매출의 21.3%</text>
+<rect x="200" y="87.6" width="16" height="384.8" style="fill:var(--color-primary)"/>
+<text class="sk-l" x="228" y="289.0">매출 <tspan class="sk-v">97.1</tspan></text>
+<rect x="440" y="0.0" width="16" height="55.2" style="fill:var(--color-primary)"/>
+<text class="sk-l" x="428" y="30" text-anchor="end">감가상각 되더하기 <tspan class="sk-v">13.9</tspan></text>
+<text class="sk-sub" x="428" y="62" text-anchor="end">현금 지출 없는 비용</text>
+<rect x="440" y="85.2" width="16" height="187.0" style="fill:var(--color-primary)"/>
+<text class="sk-l" x="468" y="187.7">영업이익 <tspan class="sk-v">47.2</tspan></text>
+<rect x="440" y="302.2" width="16" height="152.3" style="fill:var(--color-primary)"/>
+<text class="sk-l" x="468" y="387.3">매출원가 <tspan class="sk-v">38.5</tspan></text>
+<rect x="440" y="484.5" width="16" height="25.6" style="fill:var(--color-primary)"/>
+<text class="sk-l" x="468" y="506.3">연구개발비 <tspan class="sk-v">6.5</tspan></text>
+<rect x="440" y="540.1" width="16" height="19.9" style="fill:var(--color-primary)"/>
+<text class="sk-l" x="468" y="559.1">판관비·기타 <tspan class="sk-v">5.0</tspan></text>
+<rect x="800" y="139.4" width="16" height="242.2" style="fill:var(--color-primary)"/>
+<text class="sk-l" x="828" y="127.4">영업이익+감가상각 <tspan class="sk-v">61.1</tspan></text>
+<rect x="800" y="411.6" width="16" height="9.0" style="fill:var(--color-primary)"/>
+<text class="sk-l" x="828" y="449">기타 유입 <tspan class="sk-v">2.3</tspan></text>
+<text class="sk-sub" x="828" y="481">기타 투자 1.3 · 차입 순증 0.8 등</text>
+<rect x="1110" y="139.4" width="16" height="30.8" style="fill:var(--color-primary)"/>
+<text class="sk-l" x="1138" y="127.4">법인세·운전자본 <tspan class="sk-v">7.8</tspan></text>
+<rect x="1110" y="200.2" width="16" height="220.4" style="fill:var(--color-primary)"/>
+<text class="sk-l" x="1138" y="374.5">쓸 수 있는 현금 <tspan class="sk-v">55.6</tspan></text>
+<rect x="1380" y="200.2" width="16" height="113.2" style="fill:var(--color-accent)"/>
+<text class="sk-l hl" x="1408" y="265.8">설비투자 <tspan class="sk-v hl">28.6</tspan></text>
+<rect x="1380" y="347.4" width="16" height="70.6" style="fill:var(--color-primary)"/>
+<text class="sk-l" x="1408" y="391.7">금융자산 순취득 <tspan class="sk-v">17.8</tspan></text>
+<text class="sk-sub" x="1408" y="425.7">예치·투자 자산 순매입, 구성 미확인</text>
+<rect x="1380" y="452.0" width="16" height="15.3" style="fill:var(--color-primary)"/>
+<text class="sk-l" x="1408" y="468.7">현금 증가 <tspan class="sk-v">3.9</tspan></text>
+<rect x="1380" y="501.4" width="16" height="6.7" style="fill:var(--color-primary)"/>
+<text class="sk-l" x="1408" y="513.7">배당 <tspan class="sk-v">1.7</tspan></text>
+<rect x="1380" y="542.0" width="16" height="14.5" style="fill:var(--color-primary)"/>
+<text class="sk-l" x="1408" y="558.3">인수·기타 <tspan class="sk-v">3.7</tspan></text>
+</svg>
+                        </div>
+                        <p class="sankey-note reveal" style="--d:0.3s">대조: 2023년에는 영업현금 4.3조원이 설비투자 8.8조원에 못 미쳤고, 차입을 7.0조원 순증해 부족분을 메우고 현금을 오히려 늘렸다.</p>
+                    </div>
+                    <footer class="foot"><span>출처: DART 사업보고서 연결 매출액 주석(제품별), financial-analysis 산출물, yfinance 연간 현금흐름표, sankey_skhynix.py 마디 검산, 2026-10-15 수집</span><span class="page"></span></footer>
+                </div>
+                <aside class="notes"><p>매출 97.1조 중 D램이 4분의 3(77.1%, 2022년 63.1%)입니다. 영업이익 47.2조에 비용으로만 잡힌 감가상각 13.9조를 되더하고 법인세·운전자본 등 7.8조를 빼면 영업현금흐름 53.4조. 그중 28.6조(53.5%)가 다시 설비투자로 나갔습니다. 금융자산 17.8조는 구성 미확인.</p><p>2023년엔 설비투자를 8.8조로 줄였지만(26장 0.6x) 멈추지 않았고, 모자란 돈은 차입으로 댔습니다.</p><p>(질문 대비) HBM 비중: 회사 발표는 3Q24 30%, 4Q24 40% 초과. 2025년 비중은 보도자료에서 확인되지 않음(“HBM 매출 2배 이상”만 언급).</p></aside>
+            </section>
+
+            <!-- 28 · range -->
+            <section class="slide" data-layout="range" data-mode="data" aria-label="주가 하락">
+                <div class="frame">
+                    <h2 class="title reveal">9월 말 이후 메모리 주가는 SOX보다 크게 빠졌다</h2>
+                    <div class="legend reveal" style="margin-top:24px; --d:0.08s">
+                        <span>월간 종가 변화(%), 9월 → 10월(10/15까지 월중), 원인은 [추정]</span>
+                        <span class="key"><span class="sw accent"></span>메모리 3종목</span>
+                        <span class="key"><span class="sw bar"></span>SOX</span>
+                    </div>
+                    <div class="body center">
+                        <div class="range-wrap reveal" style="--d:0.15s; --min:-35; --span:40">
+                            <div class="axis-layer" aria-hidden="true">
+                                <div class="zero"></div>
+                                <span class="tick num" data-nocheck style="--t:-30">−30</span>
+                                <span class="tick num" data-nocheck style="--t:-20">−20</span>
+                                <span class="tick num" data-nocheck style="--t:-10">−10</span>
+                                <span class="tick num" data-nocheck style="--t:0">0</span>
+                            </div>
+                            <div class="range">
+                                <div class="who"><b>SK하이닉스</b><span>메모리</span></div>
+                                <div class="rtrack" style="--lo:-28.8851; --hi:0"><span class="lo num">−28.9</span><div class="span grow from-right hl"></div></div>
+                                <div class="who"><b>삼성전자</b><span>메모리</span></div>
+                                <div class="rtrack" style="--lo:-21.9739; --hi:0"><span class="lo num">−22.0</span><div class="span grow from-right hl"></div></div>
+                                <div class="who"><b>Micron</b><span>메모리</span></div>
+                                <div class="rtrack" style="--lo:-14.1616; --hi:0"><span class="lo num">−14.2</span><div class="span grow from-right hl"></div></div>
+                                <div class="who"><b>SOX</b><span>반도체 지수</span></div>
+                                <div class="rtrack" style="--lo:-7.477; --hi:0"><span class="lo num">−7.5</span><div class="span grow from-right"></div></div>
+                            </div>
+                        </div>
+                        <ul class="range-events reveal" style="--d:0.4s">
+                            <li><span class="d" data-nocheck>10/14</span><span>SK하이닉스 하루 −10.09%, 연속 하락 중 장비 발주 지연 보도(원 매체 미기재)</span></li>
+                            <li><span class="d" data-nocheck>원인</span><span>CXMT 추격, 발주 지연 보도, 금리 우려가 겹친 것으로 [추정]</span></li>
+                        </ul>
+                    </div>
+                    <footer class="foot"><span>출처: 월간 수정종가(yfinance, fetch_prices) 2026-10-15, 24/7 Wall St(10/14)</span><span class="page"></span></footer>
+                </div>
+                <aside class="notes"><p>9월 대비 SK −28.9%, SOX −7.5%. 2분기 실적 날엔 기대치 미달로 −9.61%. 원인은 CXMT, 장비 발주 지연 보도, 금리 우려가 겹친 걸로 [추정]할 뿐이에요.</p><p>다른 기준 참고: 시가총액은 9/27 → 10/15(18일) SK −31.9%. 배경: 7/29 2분기 실적 날엔 컨센서스 대비 약 3.4조원 미달로 −9.61%.</p></aside>
+            </section>
+
+            <!-- 29 · panels -->
+            <section class="slide" data-layout="panels" data-mode="concept" aria-label="좋은 점과 조심할 점">
+                <div class="frame">
+                    <h2 class="title reveal">SK하이닉스의 강점과 위험은 함께 봐야 한다</h2>
+                    <p class="scope reveal" style="--d:0.08s">강점 / 위험, 2Q26 전후 자료</p>
+                    <div class="body center">
+                        <div class="panels panels-even">
+                            <div class="pane support reveal" style="--d:0.15s">
+                                <h3>좋게 볼 점</h3>
+                                <ul class="panels-list">
+                                    <li>HBM 매출 점유율 1위, 2Q26 50%</li>
+                                    <li>2Q26 말 순현금 69.4조원(보도 기준)</li>
+                                </ul>
+                            </div>
+                            <div class="pane limit reveal" style="--d:0.3s">
+                                <h3>조심할 점</h3>
+                                <ul class="panels-list">
+                                    <li>HBM 점유율 64%에서 50%로 하락</li>
+                                    <li>CapEx/감가상각 2.1x, 수집 4년 중 최고. 인디애나 HBM 패키징 공장 기공(2026-08-27)</li>
+                                    <li>CXMT 범용 D램 점유율 10%(2Q26)</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                    <footer class="foot"><span>출처: Counterpoint 2Q26, 뉴시스(2026-07-29), financial-analysis 산출물, WLFI(2026-08-27)</span><span class="page"></span></footer>
+                </div>
+                <aside class="notes"><p>강점과 위험을 같이 봅니다. 1위·순현금(2Q26 말 69.4조) 대 점유율 하락·이력 최고 증설·CXMT 추격(범용 D램 10%).</p><p>참고(연결 근거 없음): ASML 중국 매출 비중 1Q26 19%(Caixin). 중국 장비 반입 여력과 관련 있을 수 있지만 SK 위험으로 잇는 근거는 없습니다.</p><p>순현금은 보도 기준이고, 스크립트의 연간 순현금(2025년 말)과는 시점·집계가 달라 나란히 두지 않았습니다.</p></aside>
+            </section>
+
+            <!-- 30 · checklist -->
+            <section class="slide" data-layout="checklist" data-mode="concept" aria-label="확인점">
+                <div class="frame">
+                    <h2 class="title reveal">SK하이닉스에 대한 다음 직접 확인점은 10/28 3Q 콜,<br>영업이익 컨센서스 약 78조원이다</h2>
+                    <div class="body center">
+                        <ol class="checks">
+                            <li class="reveal" style="--d:0.12s"><span class="n ord">1</span><span class="q">영업이익 약 78조원 달성 여부<span class="cite">10/28(수) 09:00 KST</span></span></li>
+                            <li class="reveal" style="--d:0.2s"><span class="n ord">2</span><span class="q">HBM 가격과 물량, 계약 조건</span></li>
+                            <li class="reveal" style="--d:0.28s"><span class="n ord">3</span><span class="q">2분기 영업외이익의 정체(회사 원문)</span></li>
+                        </ol>
+                        <p class="checks-aside reveal" style="--d:0.4s"><span class="lbl">다른 회사 업데이트</span>TSMC 3Q 콜 10/15 발표(이 덱에 미반영) · 삼성전자 3Q26 잠정 영업이익 107.4조원 [보도]</p>
+                    </div>
+                    <footer class="foot"><span>출처: SK하이닉스 공지(TipRanks 전재), 한경비즈니스(2026-09-29), TSMC IR, 삼성전자 잠정실적(보도)</span><span class="page"></span></footer>
+                </div>
+                <aside class="notes"><p>SK하이닉스에 대한 다음 직접 확인점은 10/28 콜이에요. 컨센서스 약 78조 달성 여부, HBM 가격·물량, 2분기 영업외이익 정체를 봅니다.</p><p>오늘(10/15) TSMC 콜 결과는 이 덱에 반영하지 않았어요. 발표 직전 시총·P/E는 다시 돌립니다.</p></aside>
+            </section>
+
+            <!-- 31 · close -->
+            <section class="slide" data-layout="close" data-mode="data" aria-label="요약과 토론">
+                <div class="frame">
+                    <h2 class="title reveal">HBM의 이익은 구조 변화인가, 사이클 정점의 숫자인가</h2>
+                    <p class="scope reveal" style="--d:0.08s">요약 3줄 + 토론 질문 2개(나머지 3개는 토론 중 제시)</p>
+                    <div class="body center">
+                        <div class="close">
+                            <ol class="claims">
+                                <li class="reveal" style="--d:0.12s"><span class="k ord">1</span><p>메모리 회사의 높은 이익률은 확인되지만, HBM만 떼어 본 재무는 없다.</p></li>
+                                <li class="reveal" style="--d:0.22s"><span class="k ord">2</span><p>구조 변화가 입증되기 전까지는 사이클 위험을 반영해 읽어야 한다.</p></li>
+                                <li class="reveal" style="--d:0.32s"><span class="k ord">3</span><p>첫 확인점은 10/28 SK하이닉스 3Q 콜이다.</p></li>
+                            </ol>
+                            <div class="panel reveal" style="--d:0.45s">
+                                <div class="label">토론 질문</div>
+                                <ol class="close-qs">
+                                    <li><span class="ord">1</span><span>HBM은 메모리를<br>사이클 산업에서 벗어나게 했나?</span></li>
+                                    <li><span class="ord">2</span><span>선행 P/E 2.7배는 싼가, 함정인가?</span></li>
+                                </ol>
+                            </div>
+                        </div>
+                    </div>
+                    <footer class="foot"><span>요약 근거: 13·21·24·26·29장(앞 장 출처와 같음)</span><span class="page"></span></footer>
+                </div>
+                <aside class="notes"><p>정리: 메모리 회사의 높은 이익률은 숫자로 보이지만 HBM만의 이익은 떼어 볼 수 없어요. 구조가 바뀌었다는 게 입증되기 전까지는 사이클 위험을 반영해 읽자는 게 제 결론입니다. 토론은 "HBM이 메모리를 사이클에서 꺼냈나"부터 시작하죠.</p><p>2번: 이익 지속 가정이 깨지는 신호로 무엇을 먼저 볼까?</p><p>시간이 되면 이어서: 3) 삼성의 원스톱 대 SK·TSMC 동맹, 커스텀 HBM 시대에 누가 유리한가? 4) 메모리 가격 급등은 AI 투자를 스스로 갉아먹는가? 다음 다운사이클의 방아쇠는 기기 수요인가 AI CapEx인가? 5) 한국 투자자는 지도의 어디를 담아야 하나? 사이클 "상" 단계에 몰린 한국 종목과 해외 저사이클·고마진 단계를 어떻게 섞을까?</p></aside>
+            </section>
+
+        </main>
+    </div>
+
+    <div class="notes-panel" id="notesPanel" aria-live="polite"></div>
+    <div class="edit-hotzone" aria-hidden="true"></div>
+    <button class="edit-toggle" id="editToggle" title="편집 모드 (E)">편집</button>
+
+    <script>
+        /* ===========================================
+           슬라이드 컨트롤러 (frontend-slides)
+           키보드·휠·스와이프, #n 해시, 스테이지 scale, 노트(N)
+           ?still: 전환을 끄고 로컬 편집본을 무시한다(검사·PDF용)
+           =========================================== */
+        const STILL = new URLSearchParams(location.search).has('still');
+        if (STILL) document.documentElement.classList.add('still');
+
+        class SlidePresentation {
+            constructor() {
+                this.slides = Array.from(document.querySelectorAll('.slide'));
+                this.stage = document.getElementById('deckStage');
+                this.notesPanel = document.getElementById('notesPanel');
+                this.current = 0;
+                this.wheelLock = false;
+                this.slides.forEach((s, i) => {
+                    const page = s.querySelector('.page');
+                    if (page && !page.textContent.trim()) page.textContent = String(i + 1);
+                });
+                this.setupScale();
+                this.setupKeys();
+                this.setupWheel();
+                this.setupTouch();
+                window.addEventListener('hashchange', () => this.show(this.fromHash()));
+                this.show(this.fromHash());
+            }
+
+            setupScale() {
+                const scale = () => {
+                    const f = Math.min(window.innerWidth / 1920, window.innerHeight / 1080);
+                    const x = (window.innerWidth - 1920 * f) / 2;
+                    const y = (window.innerHeight - 1080 * f) / 2;
+                    this.stage.style.transform = `translate(${x}px, ${y}px) scale(${f})`;
+                };
+                scale();
+                window.addEventListener('resize', scale);
+            }
+
+            fromHash() {
+                const n = parseInt(location.hash.replace('#', ''), 10);
+                return Number.isFinite(n) ? n - 1 : 0;
+            }
+
+            setupKeys() {
+                document.addEventListener('keydown', (e) => {
+                    if (e.target.isContentEditable) return;
+                    if (['ArrowRight', 'ArrowDown', 'PageDown', ' '].includes(e.key)) { e.preventDefault(); this.go(1); }
+                    else if (['ArrowLeft', 'ArrowUp', 'PageUp'].includes(e.key)) { e.preventDefault(); this.go(-1); }
+                    else if (e.key === 'Home') this.show(0);
+                    else if (e.key === 'End') this.show(this.slides.length - 1);
+                    else if (e.key === 'n' || e.key === 'N') { this.notesPanel.classList.toggle('show'); this.renderNotes(); }
+                });
+            }
+
+            setupWheel() {
+                window.addEventListener('wheel', (e) => {
+                    if (this.wheelLock || Math.abs(e.deltaY) < 20) return;
+                    this.wheelLock = true;
+                    this.go(e.deltaY > 0 ? 1 : -1);
+                    setTimeout(() => { this.wheelLock = false; }, 700);
+                }, { passive: true });
+            }
+
+            setupTouch() {
+                let sx = 0;
+                let sy = 0;
+                window.addEventListener('touchstart', (e) => { sx = e.touches[0].clientX; sy = e.touches[0].clientY; }, { passive: true });
+                window.addEventListener('touchend', (e) => {
+                    const dx = e.changedTouches[0].clientX - sx;
+                    const dy = e.changedTouches[0].clientY - sy;
+                    if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy)) this.go(dx < 0 ? 1 : -1);
+                }, { passive: true });
+            }
+
+            go(step) { this.show(this.current + step); }
+
+            show(index) {
+                this.current = Math.max(0, Math.min(index, this.slides.length - 1));
+                this.slides.forEach((s, i) => {
+                    const on = i === this.current;
+                    s.classList.toggle('active', on);
+                    s.classList.toggle('visible', on);
+                    s.setAttribute('aria-hidden', on ? 'false' : 'true');
+                });
+                history.replaceState(null, '', location.pathname + location.search + '#' + (this.current + 1));
+                this.renderNotes();
+            }
+
+            renderNotes() {
+                if (!this.notesPanel.classList.contains('show')) return;
+                const notes = this.slides[this.current].querySelector('.notes');
+                this.notesPanel.innerHTML = notes ? notes.innerHTML : '';
+            }
+        }
+
+        /* ===========================================
+           인라인 편집 (frontend-slides)
+           E 키 또는 왼쪽 위 핫존. 편집본은 localStorage에 저장하고,
+           파일이 바뀌면(lastModified) 예전 편집본을 쓰지 않는다. Ctrl/Cmd+S로 내려받기.
+           =========================================== */
+        class InlineEditor {
+            constructor() {
+                this.active = false;
+                this.key = 'deck:' + location.pathname + ':' + document.lastModified;
+                this.stage = document.getElementById('deckStage');
+                this.toggle = document.getElementById('editToggle');
+                this.targets = '.slide h1, .slide h2, .slide h3, .slide p, .slide li, .slide .name, .slide .what, .slide .when, .slide .metric, .slide .head, .slide .colhead, .slide .rowlabel, .slide .q';
+                if (!STILL) this.restore();
+                this.bind();
+            }
+
+            restore() {
+                try {
+                    const saved = localStorage.getItem(this.key);
+                    if (saved) this.stage.innerHTML = saved;
+                } catch (err) { /* 저장소를 못 쓰면 파일 그대로 */ }
+            }
+
+            save() {
+                try { localStorage.setItem(this.key, this.stage.innerHTML); } catch (err) { /* 무시 */ }
+            }
+
+            toggleEdit() {
+                this.active = !this.active;
+                this.stage.querySelectorAll(this.targets).forEach((el) => el.setAttribute('contenteditable', this.active ? 'true' : 'false'));
+                this.toggle.classList.toggle('active', this.active);
+                if (!this.active) this.save();
+            }
+
+            download() {
+                this.save();
+                const blob = new Blob(['<!DOCTYPE html>\n' + document.documentElement.outerHTML], { type: 'text/html' });
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(blob);
+                a.download = 'index.html';
+                a.click();
+                URL.revokeObjectURL(a.href);
+            }
+
+            bind() {
+                let timer = null;
+                this.stage.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(() => this.save(), 400); });
+                this.toggle.addEventListener('click', () => this.toggleEdit());
+                const hot = document.querySelector('.edit-hotzone');
+                let hide = null;
+                const hideSoon = () => { hide = setTimeout(() => { if (!this.active) this.toggle.classList.remove('show'); }, 400); };
+                hot.addEventListener('mouseenter', () => { clearTimeout(hide); this.toggle.classList.add('show'); });
+                hot.addEventListener('mouseleave', hideSoon);
+                this.toggle.addEventListener('mouseenter', () => clearTimeout(hide));
+                this.toggle.addEventListener('mouseleave', hideSoon);
+                hot.addEventListener('click', () => this.toggleEdit());
+                document.addEventListener('keydown', (e) => {
+                    if ((e.key === 'e' || e.key === 'E') && !e.target.isContentEditable && !e.metaKey && !e.ctrlKey) this.toggleEdit();
+                    if ((e.metaKey || e.ctrlKey) && e.key === 's') { e.preventDefault(); this.download(); }
+                });
+            }
+        }
+
+        new InlineEditor();
+        window.deck = new SlidePresentation();
+        document.fonts.ready.then(() => { window.__deckReady = true; });
+    </script>
+</body>
+</html>
